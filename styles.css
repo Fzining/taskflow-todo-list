@@ -696,6 +696,10 @@ textarea {
   gap: 14px;
 }
 
+.form-grid.single-field {
+  grid-template-columns: 1fr;
+}
+
 menu {
   display: flex;
   justify-content: flex-end;

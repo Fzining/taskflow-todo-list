@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=17" />
+    <link rel="stylesheet" href="styles.css?v=18" />
   </head>
   <body>
     <div class="app-shell">
@@ -187,14 +187,21 @@
             <input id="taskTime" name="time" type="time" required />
           </label>
         </div>
-        <div class="form-grid">
+        <div class="form-grid single-field">
           <label>
             <span>End</span>
             <input id="taskEndTime" name="endTime" type="time" />
           </label>
+        </div>
+        <div class="form-grid">
           <label>
-            <span>Reminder</span>
-            <input id="taskReminderMinutes" name="reminderMinutes" type="number" min="0" max="1440" step="1" placeholder="No reminder" />
+            <span>Start reminder</span>
+            <input id="taskStartReminderMinutes" name="startReminderMinutes" type="number" min="0" max="1440" step="1" placeholder="No reminder" />
+            <small class="field-hint">Minutes before start</small>
+          </label>
+          <label>
+            <span>End reminder</span>
+            <input id="taskEndReminderMinutes" name="endReminderMinutes" type="number" min="0" max="1440" step="1" placeholder="No reminder" />
             <small class="field-hint">Minutes before end</small>
           </label>
         </div>
@@ -239,6 +246,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=17" type="module"></script>
+    <script src="app.js?v=18" type="module"></script>
   </body>
 </html>

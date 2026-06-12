@@ -3,6 +3,7 @@ const SYNC_META_KEY = "taskflow.sync-meta.v1";
 const REMINDER_META_KEY = "taskflow.reminder-meta.v1";
 const SYNC_INTERVAL_MS = 5000;
 const MAX_TIMEOUT_MS = 2147483647;
+const REMINDER_SCAN_INTERVAL_MS = 30000;
 const SUPABASE_REST_URL = "https://vzllsenewstwjbnplysm.supabase.co/rest/v1";
 const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_9y_vYoh3zmM_zph31oVj3g_3uw79IsX";
@@ -24,7 +25,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "10:00",
     endTime: "",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "High",
     category: "today",
     files: 2,
@@ -39,7 +41,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "13:30",
     endTime: "",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "Medium",
     category: "today",
     files: 0,
@@ -54,7 +57,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "09:15",
     endTime: "",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "Low",
     category: "today",
     files: 0,
@@ -70,7 +74,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "14:00",
     endTime: "15:00",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "Medium",
     category: "today",
     files: 0,
@@ -85,7 +90,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "09:00",
     endTime: "09:30",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "Low",
     category: "today",
     files: 0,
@@ -101,7 +107,8 @@ const defaultTasks = [
     date: localDateString(),
     time: "16:00",
     endTime: "",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "Medium",
     category: "inbox",
     files: 0,
@@ -116,7 +123,8 @@ const defaultTasks = [
     date: addDays(localDateString(), 1),
     time: "11:00",
     endTime: "",
-    reminderMinutes: null,
+    startReminderMinutes: null,
+    endReminderMinutes: null,
     priority: "High",
     category: "upcoming",
     files: 1,
@@ -152,6 +160,7 @@ const state = {
   syncTimer: null,
   syncSaveTimer: null,
   reminderTimers: new Map(),
+  reminderScanTimer: null,
   reminders: loadReminderMeta(),
   isApplyingRemote: false,
 };
@@ -215,14 +224,15 @@ elements.taskForm.addEventListener("submit", (event) => {
     date: formData.get("date").toString(),
     time: formData.get("time").toString(),
     endTime: formData.get("endTime").toString(),
-    reminderMinutes: parseReminderMinutes(formData.get("reminderMinutes").toString()),
+    startReminderMinutes: parseReminderMinutes(formData.get("startReminderMinutes").toString()),
+    endReminderMinutes: parseReminderMinutes(formData.get("endReminderMinutes").toString()),
     priority: formData.get("priority").toString(),
     category: formData.get("category").toString(),
   };
   const editingId = elements.taskForm.dataset.editingId;
 
-  if (taskData.reminderMinutes !== null && !taskData.endTime) {
-    window.alert("Please add an end time before setting a reminder.");
+  if (taskData.endReminderMinutes !== null && !taskData.endTime) {
+    window.alert("Please add an end time before setting an end reminder.");
     return;
   }
 
@@ -239,7 +249,7 @@ elements.taskForm.addEventListener("submit", (event) => {
     });
   }
 
-  if (taskData.reminderMinutes !== null) {
+  if (taskData.startReminderMinutes !== null || taskData.endReminderMinutes !== null) {
     void requestNotificationAccess();
   }
 
@@ -269,6 +279,7 @@ if ("serviceWorker" in navigator) {
 
 render();
 startCloudSync();
+startReminderEngine();
 
 async function registerServiceWorker() {
   try {
@@ -287,13 +298,22 @@ async function registerServiceWorker() {
 
 function loadTasks() {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return defaultTasks;
+  if (!stored) return defaultTasks.map(normalizeTask);
   try {
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : defaultTasks;
+    return Array.isArray(parsed) ? parsed.map(normalizeTask) : defaultTasks.map(normalizeTask);
   } catch {
-    return defaultTasks;
+    return defaultTasks.map(normalizeTask);
   }
+}
+
+function normalizeTask(task) {
+  return {
+    ...task,
+    date: task.date || localDateString(),
+    startReminderMinutes: task.startReminderMinutes ?? null,
+    endReminderMinutes: task.endReminderMinutes ?? task.reminderMinutes ?? null,
+  };
 }
 
 function loadSyncMeta() {
@@ -332,18 +352,20 @@ function saveReminderMeta() {
 
 function openTaskDialog(task = null) {
   resetTaskDialog();
-  if (task) {
-    elements.taskForm.dataset.editingId = task.id;
+  const normalizedTask = task ? normalizeTask(task) : null;
+  if (normalizedTask) {
+    elements.taskForm.dataset.editingId = normalizedTask.id;
     elements.taskDialogTitle.textContent = "Edit Task";
     elements.taskSubmitButton.textContent = "Save Changes";
-    document.querySelector("#taskTitle").value = task.title;
-    document.querySelector("#taskDetails").value = task.details === "No extra details yet." ? "" : task.details;
-    document.querySelector("#taskDate").value = task.date || localDateString();
-    document.querySelector("#taskTime").value = task.time || "10:00";
-    document.querySelector("#taskEndTime").value = task.endTime || "";
-    document.querySelector("#taskReminderMinutes").value = task.reminderMinutes ?? "";
-    document.querySelector("#taskCategory").value = task.category || "today";
-    document.querySelector("#taskPriority").value = task.priority || "Medium";
+    document.querySelector("#taskTitle").value = normalizedTask.title;
+    document.querySelector("#taskDetails").value = normalizedTask.details === "No extra details yet." ? "" : normalizedTask.details;
+    document.querySelector("#taskDate").value = normalizedTask.date || localDateString();
+    document.querySelector("#taskTime").value = normalizedTask.time || "10:00";
+    document.querySelector("#taskEndTime").value = normalizedTask.endTime || "";
+    document.querySelector("#taskStartReminderMinutes").value = normalizedTask.startReminderMinutes ?? "";
+    document.querySelector("#taskEndReminderMinutes").value = normalizedTask.endReminderMinutes ?? "";
+    document.querySelector("#taskCategory").value = normalizedTask.category || "today";
+    document.querySelector("#taskPriority").value = normalizedTask.priority || "Medium";
   } else {
     const category = state.filter === "completed" ? "today" : state.filter;
     document.querySelector("#taskDate").value = category === "upcoming" ? addDays(localDateString(), 1) : localDateString();
@@ -436,7 +458,7 @@ async function syncFromCloud(options = {}) {
 
 function applyRemoteTasks(tasks, updatedAt) {
   state.isApplyingRemote = true;
-  state.tasks = tasks;
+  state.tasks = tasks.map(normalizeTask);
   state.sync.updatedAt = updatedAt;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
   state.hasStoredTasks = true;
@@ -497,7 +519,7 @@ function mergeTasks(remoteTasks, localTasks) {
   const byId = new Map();
   [...remoteTasks, ...localTasks].forEach((task) => {
     if (!task?.id) return;
-    byId.set(task.id, { ...byId.get(task.id), ...task });
+    byId.set(task.id, normalizeTask({ ...byId.get(task.id), ...task }));
   });
   return [...byId.values()];
 }
@@ -586,28 +608,30 @@ function getSectionTitle() {
 }
 
 function taskTemplate(task) {
-  const completed = task.completed ? " completed" : "";
-  const priority = task.priority.toLowerCase();
-  const meta = task.completed
+  const normalizedTask = normalizeTask(task);
+  const completed = normalizedTask.completed ? " completed" : "";
+  const priority = normalizedTask.priority.toLowerCase();
+  const reminderLabel = formatReminderSummary(normalizedTask);
+  const meta = normalizedTask.completed
     ? `<span>${iconInline("check-circle")} Completed${task.completedAt ? ` at ${task.completedAt}` : ""}</span>`
     : `
-      <span>${iconInline("clock")} ${formatTimeRange(task)}</span>
-      ${task.reminderMinutes !== null && task.reminderMinutes !== undefined ? `<span>${iconInline("bell")} ${formatReminderLabel(task.reminderMinutes)}</span>` : ""}
-      ${task.files ? `<span>${iconInline("file")} ${task.files} Files</span>` : ""}
-      ${task.team ? `<span class="team-meta">${iconInline("group")} ${escapeHtml(task.team)}</span>` : ""}
+      <span>${iconInline("clock")} ${formatTimeRange(normalizedTask)}</span>
+      ${reminderLabel ? `<span>${iconInline("bell")} ${escapeHtml(reminderLabel)}</span>` : ""}
+      ${normalizedTask.files ? `<span>${iconInline("file")} ${normalizedTask.files} Files</span>` : ""}
+      ${normalizedTask.team ? `<span class="team-meta">${iconInline("group")} ${escapeHtml(normalizedTask.team)}</span>` : ""}
     `;
 
   return `
-    <article class="task-card${completed}" data-id="${task.id}">
-      <button class="task-toggle" data-action="toggle" type="button" aria-label="${task.completed ? "Mark incomplete" : "Mark complete"}">
-        ${task.completed ? iconInline("check") : ""}
+    <article class="task-card${completed}" data-id="${normalizedTask.id}">
+      <button class="task-toggle" data-action="toggle" type="button" aria-label="${normalizedTask.completed ? "Mark incomplete" : "Mark complete"}">
+        ${normalizedTask.completed ? iconInline("check") : ""}
       </button>
       <div class="task-main">
         <div class="task-top">
-          <h3 class="task-title">${escapeHtml(task.title)}</h3>
-          <span class="priority ${priority}">${escapeHtml(task.priority)}</span>
+          <h3 class="task-title">${escapeHtml(normalizedTask.title)}</h3>
+          <span class="priority ${priority}">${escapeHtml(normalizedTask.priority)}</span>
         </div>
-        <p class="task-detail">${escapeHtml(task.details)}</p>
+        <p class="task-detail">${escapeHtml(normalizedTask.details)}</p>
         <div class="task-meta">
           ${meta}
           <span class="task-menu">
@@ -684,36 +708,54 @@ function scheduleTaskReminders() {
   state.reminderTimers.forEach((timer) => window.clearTimeout(timer));
   state.reminderTimers.clear();
 
-  state.tasks.forEach((task) => {
-    if (task.completed || task.reminderMinutes === null || task.reminderMinutes === undefined || !task.endTime) return;
-    const reminderKey = getReminderKey(task);
-    if (state.reminders[task.id] === reminderKey) return;
+  checkDueReminders();
 
-    const dueAt = getTaskDueAt(task);
-    if (!dueAt) return;
-    const reminderAt = dueAt.getTime() - Number(task.reminderMinutes) * 60000;
-    const delay = reminderAt - Date.now();
+  getPendingReminderEvents().forEach((reminder) => {
+    const delay = reminder.reminderAt - Date.now();
     if (delay <= 0 || delay > MAX_TIMEOUT_MS) return;
 
     const timer = window.setTimeout(() => {
-      notifyTaskReminder(task.id, reminderKey);
+      checkDueReminders();
     }, delay);
-    state.reminderTimers.set(task.id, timer);
+    state.reminderTimers.set(reminder.key, timer);
   });
 }
 
-async function notifyTaskReminder(taskId, reminderKey) {
-  const task = state.tasks.find((item) => item.id === taskId);
-  if (!task || task.completed || getReminderKey(task) !== reminderKey) return;
-
-  state.reminders[taskId] = reminderKey;
-  saveReminderMeta();
-  await showTaskNotification(task);
+function startReminderEngine() {
+  checkDueReminders();
+  window.clearInterval(state.reminderScanTimer);
+  state.reminderScanTimer = window.setInterval(checkDueReminders, REMINDER_SCAN_INTERVAL_MS);
+  window.addEventListener("focus", checkDueReminders);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkDueReminders();
+  });
 }
 
-async function showTaskNotification(task) {
+function checkDueReminders() {
+  const now = Date.now();
+  getPendingReminderEvents()
+    .filter((reminder) => reminder.reminderAt <= now)
+    .forEach((reminder) => {
+      void notifyTaskReminder(reminder);
+    });
+}
+
+async function notifyTaskReminder(reminder) {
+  const task = state.tasks.find((item) => item.id === reminder.taskId);
+  if (!task || task.completed || getReminderKey(task, reminder.type) !== reminder.key) return;
+
+  state.reminders[reminder.key] = Date.now();
+  saveReminderMeta();
+  await showTaskNotification(task, reminder.type);
+}
+
+async function showTaskNotification(task, type) {
   const title = "TaskFlow reminder";
-  const body = `${task.title} is due at ${formatTime(task.endTime)}.`;
+  const targetTime = type === "start" ? task.time : task.endTime;
+  const body =
+    type === "start"
+      ? `${task.title} starts at ${formatTime(targetTime)}.`
+      : `${task.title} is due at ${formatTime(targetTime)}.`;
 
   if (!("Notification" in window)) {
     window.alert(`${title}\n${body}`);
@@ -733,7 +775,7 @@ async function showTaskNotification(task) {
     body,
     icon: "assets/icon-192.png",
     badge: "assets/icon-192.png",
-    tag: `taskflow-${task.id}`,
+    tag: `taskflow-${task.id}-${type}`,
   };
 
   if ("serviceWorker" in navigator) {
@@ -754,8 +796,43 @@ async function requestNotificationAccess() {
   }
 }
 
-function getReminderKey(task) {
-  return [task.date || localDateString(), task.endTime || "", task.reminderMinutes ?? "", task.title || ""].join("|");
+function getPendingReminderEvents() {
+  return state.tasks.flatMap(getTaskReminderEvents).filter((reminder) => !state.reminders[reminder.key]);
+}
+
+function getTaskReminderEvents(task) {
+  const normalizedTask = normalizeTask(task);
+  if (normalizedTask.completed) return [];
+  const reminders = [];
+  const startAt = getTaskStartAt(normalizedTask);
+  const dueAt = getTaskDueAt(normalizedTask);
+
+  if (normalizedTask.startReminderMinutes !== null && startAt) {
+    reminders.push(createReminderEvent(normalizedTask, "start", startAt, normalizedTask.startReminderMinutes));
+  }
+
+  if (normalizedTask.endReminderMinutes !== null && dueAt) {
+    reminders.push(createReminderEvent(normalizedTask, "end", dueAt, normalizedTask.endReminderMinutes));
+  }
+
+  return reminders.filter(Boolean);
+}
+
+function createReminderEvent(task, type, targetAt, minutes) {
+  if (minutes === null || minutes === undefined) return null;
+  return {
+    taskId: task.id,
+    type,
+    key: getReminderKey(task, type),
+    reminderAt: targetAt.getTime() - Number(minutes) * 60000,
+  };
+}
+
+function getReminderKey(task, type) {
+  const normalizedTask = normalizeTask(task);
+  const targetTime = type === "start" ? normalizedTask.time : normalizedTask.endTime;
+  const minutes = type === "start" ? normalizedTask.startReminderMinutes : normalizedTask.endReminderMinutes;
+  return [normalizedTask.id, type, normalizedTask.date || localDateString(), targetTime || "", minutes ?? "", normalizedTask.title || ""].join("|");
 }
 
 function getTaskDueAt(task) {
@@ -783,9 +860,20 @@ function parseReminderMinutes(value) {
   return Math.max(0, Math.min(1440, Math.round(minutes)));
 }
 
-function formatReminderLabel(minutes) {
+function formatReminderSummary(task) {
+  const labels = [];
+  if (task.startReminderMinutes !== null && task.startReminderMinutes !== undefined) {
+    labels.push(`Start: ${formatReminderOffset(task.startReminderMinutes)}`);
+  }
+  if (task.endReminderMinutes !== null && task.endReminderMinutes !== undefined) {
+    labels.push(`End: ${formatReminderOffset(task.endReminderMinutes)}`);
+  }
+  return labels.join(" / ");
+}
+
+function formatReminderOffset(minutes) {
   const value = Number(minutes);
-  return value === 0 ? "At deadline" : `${value} min before end`;
+  return value === 0 ? "At time" : `${value} min before`;
 }
 
 function formatDate(value) {
