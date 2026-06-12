@@ -12,10 +12,16 @@ const TASKS_TABLE = "taskflow_state";
 const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-const supabase = window.supabase.createClient(
-  SUPABASE_REST_URL.replace("/rest/v1", ""),
-  SUPABASE_PUBLISHABLE_KEY,
-);
+let supabase = null;
+function getSupabase() {
+  if (!supabase && window.supabase) {
+    supabase = window.supabase.createClient(
+      SUPABASE_REST_URL.replace("/rest/v1", ""),
+      SUPABASE_PUBLISHABLE_KEY,
+    );
+  }
+  return supabase;
+}
 
 let currentUserId = null;
 let currentUserEmail = "";
@@ -525,23 +531,33 @@ async function initAuth() {
   });
 
   // Check for existing session
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      currentUserId = session.user.id;
-      currentUserEmail = session.user.email || "";
-      await onUserLoggedIn(session.user);
-    } else if (event === "SIGNED_OUT") {
-      currentUserId = null;
-      currentUserEmail = "";
-    }
-  });
+  try {
+    getSupabase().auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        currentUserId = session.user.id;
+        currentUserEmail = session.user.email || "";
+        await onUserLoggedIn(session.user);
+      } else if (event === "SIGNED_OUT") {
+        currentUserId = null;
+        currentUserEmail = "";
+        elements.appShell.style.display = "none";
+        elements.authPage.style.display = "";
+      }
+    });
 
-  const { data } = await supabase.auth.getSession();
-  if (data.session?.user) {
-    currentUserId = data.session.user.id;
-    currentUserEmail = data.session.user.email || "";
-    await onUserLoggedIn(data.session.user);
+    const { data } = await getSupabase().auth.getSession();
+    if (data.session?.user) {
+      currentUserId = data.session.user.id;
+      currentUserEmail = data.session.user.email || "";
+      await onUserLoggedIn(data.session.user);
+      return;
+    }
+  } catch (e) {
+    console.warn("Auth init failed, showing login:", e);
   }
+  // No session — show login page
+  elements.authPage.style.display = "";
+  elements.appShell.style.display = "none";
 }
 
 function friendlyAuthError(error) {
@@ -556,7 +572,7 @@ function friendlyAuthError(error) {
 async function handleSignIn(email, password) {
   if (!email || !password) { elements.authError.textContent = "Please enter both email and password."; return; }
   elements.authError.textContent = "";
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await getSupabase().auth.signInWithPassword({ email, password });
   if (error) { elements.authError.textContent = friendlyAuthError(error); }
 }
 
@@ -564,7 +580,7 @@ async function handleSignUp(email, password) {
   if (!email || !password) { elements.regError.textContent = "Please enter both email and password."; return; }
   if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
   elements.regError.textContent = "";
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { error } = await getSupabase().auth.signUp({ email, password });
   if (error) { elements.regError.textContent = friendlyAuthError(error); }
 }
 
@@ -607,7 +623,7 @@ async function handleSignOut() {
   state.syncTimer && clearInterval(state.syncTimer);
   state.syncSaveTimer && clearTimeout(state.syncSaveTimer);
   state.reminderScanTimer && clearInterval(state.reminderScanTimer);
-  await supabase.auth.signOut();
+  await getSupabase().auth.signOut();
   elements.appShell.style.display = "none";
   elements.authPage.style.display = "";
   elements.authLogin.style.display = "";
@@ -870,7 +886,7 @@ async function pushTasksToCloud() {
 async function supabaseHeaders(extra = {}) {
   let token = SUPABASE_PUBLISHABLE_KEY;
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await getSupabase().auth.getSession();
     if (data.session?.access_token) token = data.session.access_token;
   } catch { /* use anon key */ }
   return {
