@@ -4,6 +4,7 @@ const REMINDER_META_KEY = "taskflow.reminder-meta.v1";
 const SYNC_INTERVAL_MS = 5000;
 const MAX_TIMEOUT_MS = 2147483647;
 const REMINDER_SCAN_INTERVAL_MS = 30000;
+const REMINDER_STALE_GRACE_MS = 600000;
 const SUPABASE_REST_URL = "https://vzllsenewstwjbnplysm.supabase.co/rest/v1";
 const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_9y_vYoh3zmM_zph31oVj3g_3uw79IsX";
@@ -233,6 +234,18 @@ elements.taskForm.addEventListener("submit", (event) => {
 
   if (taskData.endReminderMinutes !== null && !taskData.endTime) {
     window.alert("Please add an end time before setting an end reminder.");
+    return;
+  }
+
+  const timingError = getTaskTimingError(taskData);
+  if (timingError) {
+    window.alert(timingError);
+    return;
+  }
+
+  const reminderError = getReminderTimingError(taskData);
+  if (reminderError) {
+    window.alert(reminderError);
     return;
   }
 
@@ -735,6 +748,7 @@ function checkDueReminders() {
   const now = Date.now();
   getPendingReminderEvents()
     .filter((reminder) => reminder.reminderAt <= now)
+    .filter((reminder) => !expireStaleReminder(reminder, now))
     .forEach((reminder) => {
       void notifyTaskReminder(reminder);
     });
@@ -744,9 +758,10 @@ async function notifyTaskReminder(reminder) {
   const task = state.tasks.find((item) => item.id === reminder.taskId);
   if (!task || task.completed || getReminderKey(task, reminder.type) !== reminder.key) return;
 
+  const didShow = await showTaskNotification(task, reminder.type);
+  if (!didShow) return;
   state.reminders[reminder.key] = Date.now();
   saveReminderMeta();
-  await showTaskNotification(task, reminder.type);
 }
 
 async function showTaskNotification(task, type) {
@@ -759,7 +774,7 @@ async function showTaskNotification(task, type) {
 
   if (!("Notification" in window)) {
     window.alert(`${title}\n${body}`);
-    return;
+    return true;
   }
 
   if (Notification.permission === "default") {
@@ -768,7 +783,7 @@ async function showTaskNotification(task, type) {
 
   if (Notification.permission !== "granted") {
     window.alert(`${title}\n${body}`);
-    return;
+    return true;
   }
 
   const options = {
@@ -779,12 +794,18 @@ async function showTaskNotification(task, type) {
   };
 
   if ("serviceWorker" in navigator) {
-    const registration = await navigator.serviceWorker.ready;
-    await registration.showNotification(title, options);
-    return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, options);
+      return true;
+    } catch {
+      new Notification(title, options);
+      return true;
+    }
   }
 
   new Notification(title, options);
+  return true;
 }
 
 async function requestNotificationAccess() {
@@ -826,6 +847,43 @@ function createReminderEvent(task, type, targetAt, minutes) {
     key: getReminderKey(task, type),
     reminderAt: targetAt.getTime() - Number(minutes) * 60000,
   };
+}
+
+function expireStaleReminder(reminder, now) {
+  if (now - reminder.reminderAt <= REMINDER_STALE_GRACE_MS) return false;
+  state.reminders[reminder.key] = now;
+  saveReminderMeta();
+  return true;
+}
+
+function getTaskTimingError(task) {
+  const startAt = getTaskStartAt(task);
+  const dueAt = getTaskDueAt(task);
+  if (!startAt) return "Please choose a valid start time.";
+  if (dueAt && dueAt.getTime() <= startAt.getTime()) {
+    return "End time must be later than start time.";
+  }
+  if (task.startReminderMinutes !== null && startAt.getTime() <= Date.now()) {
+    return "Start time must be in the future when a start reminder is enabled.";
+  }
+  if (task.endReminderMinutes !== null && dueAt && dueAt.getTime() <= Date.now()) {
+    return "End time must be in the future when an end reminder is enabled.";
+  }
+  return "";
+}
+
+function getReminderTimingError(task) {
+  const events = getTaskReminderEvents({
+    id: "draft",
+    completed: false,
+    ...task,
+  });
+  const now = Date.now();
+  const invalid = events.find((reminder) => reminder.reminderAt <= now);
+  if (!invalid) return "";
+
+  const label = invalid.type === "start" ? "Start reminder" : "End reminder";
+  return `${label} time has already passed. Please choose a later task time or fewer reminder minutes.`;
 }
 
 function getReminderKey(task, type) {

@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=19" />
   </head>
   <body>
     <div class="app-shell">
@@ -197,12 +197,12 @@
           <label>
             <span>Start reminder</span>
             <input id="taskStartReminderMinutes" name="startReminderMinutes" type="number" min="0" max="1440" step="1" placeholder="No reminder" />
-            <small class="field-hint">Minutes before start</small>
+            <small class="field-hint">Minutes before start, future only</small>
           </label>
           <label>
             <span>End reminder</span>
             <input id="taskEndReminderMinutes" name="endReminderMinutes" type="number" min="0" max="1440" step="1" placeholder="No reminder" />
-            <small class="field-hint">Minutes before end</small>
+            <small class="field-hint">Minutes before end, future only</small>
           </label>
         </div>
         <div class="form-grid">
@@ -246,6 +246,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=18" type="module"></script>
+    <script src="app.js?v=19" type="module"></script>
   </body>
 </html>
