@@ -837,7 +837,7 @@ menu {
 
   .content-canvas {
     width: min(414px, calc(100% - 40px));
-    padding: 30px 0 112px;
+    padding: 30px 0 172px;
   }
 
   .mobile-summary {
