@@ -1,9 +1,7 @@
-const CACHE_NAME = "taskflow-pwa-v32";
+const CACHE_NAME = "taskflow-pwa-v33";
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./styles.css?v=32",
-  "./app.js?v=32",
+  "./styles.css?v=33",
+  "./app.js?v=33",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",
@@ -17,9 +15,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
   );
   self.clients.claim();
 });
@@ -29,6 +25,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+  // Always go network-first for HTML to ensure fresh CDN scripts
+  if (event.request.destination === "document") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("./index.html"))
+    );
     return;
   }
 
