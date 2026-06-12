@@ -31,7 +31,7 @@ export default async function handler(request, response) {
 
 async function getTasks(request, response) {
   try {
-    const blob = await get(tasksPath(request), { access: "private" });
+    const blob = await get(tasksPath(request), { access: "private", useCache: false });
     if (!blob?.stream) {
       response.status(200).json({ tasks: [], updatedAt: 0 });
       return;
