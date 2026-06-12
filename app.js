@@ -471,6 +471,7 @@ function getVisibleTasks() {
   const tasks = state.tasks.filter((task) => {
     if (state.filter === "completed") return task.completed;
     if (state.filter === "today") return task.category === "today";
+    if (state.filter === "upcoming") return !task.completed;
     return task.category === state.filter && !task.completed;
   });
   return tasks.sort(compareTasks);
