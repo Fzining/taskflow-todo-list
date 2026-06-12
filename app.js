@@ -148,7 +148,9 @@ const elements = {
   completedCount: document.querySelector("#completedCount"),
   overdueCount: document.querySelector("#overdueCount"),
   taskDialog: document.querySelector("#taskDialog"),
+  taskDialogTitle: document.querySelector("#taskDialogTitle"),
   taskForm: document.querySelector("#taskForm"),
+  taskSubmitButton: document.querySelector("#taskSubmitButton"),
   searchDialog: document.querySelector("#searchDialog"),
   searchInput: document.querySelector("#searchInput"),
   searchResults: document.querySelector("#searchResults"),
@@ -158,12 +160,12 @@ document.querySelectorAll(".icon[data-icon]").forEach((node) => {
   node.innerHTML = icons[node.dataset.icon] ?? "";
 });
 
-document.querySelector("#newTaskButton").addEventListener("click", openTaskDialog);
-document.querySelector("#newTaskMobileButton").addEventListener("click", openTaskDialog);
-document.querySelector("#quickAddDesktop").addEventListener("click", openTaskDialog);
+document.querySelector("#newTaskButton").addEventListener("click", () => openTaskDialog());
+document.querySelector("#newTaskMobileButton").addEventListener("click", () => openTaskDialog());
+document.querySelector("#quickAddDesktop").addEventListener("click", () => openTaskDialog());
 document.querySelectorAll("#taskDialog [data-dialog-close]").forEach((button) => {
   button.addEventListener("click", () => {
-    elements.taskForm.reset();
+    resetTaskDialog();
     elements.taskDialog.close();
   });
 });
@@ -188,23 +190,38 @@ document.querySelectorAll("[data-view]").forEach((button) => {
 elements.taskForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(elements.taskForm);
-  state.tasks.unshift({
-    id: createId(),
+  const taskData = {
     title: formData.get("title").toString().trim(),
     details: formData.get("details").toString().trim() || "No extra details yet.",
     time: formData.get("time").toString(),
-    endTime: "",
+    endTime: formData.get("endTime").toString(),
     priority: formData.get("priority").toString(),
-    category: "today",
-    files: 0,
-    team: "",
-    completed: false,
-    createdAt: Date.now(),
-  });
+    category: formData.get("category").toString(),
+  };
+  const editingId = elements.taskForm.dataset.editingId;
+
+  if (editingId) {
+    state.tasks = state.tasks.map((task) => (task.id === editingId ? { ...task, ...taskData, updatedAt: Date.now() } : task));
+  } else {
+    state.tasks.unshift({
+      id: createId(),
+      ...taskData,
+      files: 0,
+      team: "",
+      completed: false,
+      createdAt: Date.now(),
+    });
+  }
+
   saveTasks();
-  elements.taskForm.reset();
+  const nextFilter = taskData.category;
+  resetTaskDialog();
   elements.taskDialog.close();
-  setFilter("today");
+  if (editingId) {
+    render();
+    return;
+  }
+  setFilter(nextFilter);
 });
 
 elements.searchInput.addEventListener("input", () => renderSearch(elements.searchInput.value));
@@ -266,11 +283,31 @@ function saveSyncMeta() {
   localStorage.setItem(SYNC_META_KEY, JSON.stringify(state.sync));
 }
 
-function openTaskDialog() {
-  elements.taskForm.reset();
-  document.querySelector("#taskTime").value = "10:00";
+function openTaskDialog(task = null) {
+  resetTaskDialog();
+  if (task) {
+    elements.taskForm.dataset.editingId = task.id;
+    elements.taskDialogTitle.textContent = "Edit Task";
+    elements.taskSubmitButton.textContent = "Save Changes";
+    document.querySelector("#taskTitle").value = task.title;
+    document.querySelector("#taskDetails").value = task.details === "No extra details yet." ? "" : task.details;
+    document.querySelector("#taskTime").value = task.time || "10:00";
+    document.querySelector("#taskEndTime").value = task.endTime || "";
+    document.querySelector("#taskCategory").value = task.category || "today";
+    document.querySelector("#taskPriority").value = task.priority || "Medium";
+  } else {
+    document.querySelector("#taskTime").value = "10:00";
+    document.querySelector("#taskCategory").value = state.filter === "completed" ? "today" : state.filter;
+  }
   elements.taskDialog.showModal();
   document.querySelector("#taskTitle").focus();
+}
+
+function resetTaskDialog() {
+  elements.taskForm.reset();
+  delete elements.taskForm.dataset.editingId;
+  elements.taskDialogTitle.textContent = "New Task";
+  elements.taskSubmitButton.textContent = "Create Task";
 }
 
 function openSearch() {
@@ -520,7 +557,8 @@ function taskTemplate(task) {
         <div class="task-meta">
           ${meta}
           <span class="task-menu">
-            <button class="text-action" data-action="duplicate" type="button">Duplicate</button>
+            <button class="text-action" data-action="edit" type="button">Edit</button>
+            <button class="text-action duplicate-action" data-action="duplicate" type="button">Duplicate</button>
             <button class="text-action" data-action="delete" type="button">Delete</button>
           </span>
         </div>
@@ -539,6 +577,10 @@ function bindTaskButtons() {
       if (button.dataset.action === "toggle") {
         task.completed = !task.completed;
         task.completedAt = task.completed ? new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      }
+      if (button.dataset.action === "edit") {
+        openTaskDialog(task);
+        return;
       }
       if (button.dataset.action === "duplicate") {
         state.tasks.unshift({
@@ -591,7 +633,7 @@ function iconInline(name) {
 }
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) => {
+  return String(value).replace(/[&<>"']/g, (character) => {
     const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
     return entities[character];
   });
