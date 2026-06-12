@@ -310,9 +310,6 @@ elements.sortButton.addEventListener("click", () => {
 document.querySelector("#searchButton").addEventListener("click", openSearch);
 
 // File drop zone in task dialog
-elements.taskFileDrop.addEventListener("click", (e) => {
-  if (e.target !== elements.taskFileInput) elements.taskFileInput.click();
-});
 elements.taskFileDrop.addEventListener("dragover", (e) => { e.preventDefault(); elements.taskFileDrop.classList.add("drag-over"); });
 elements.taskFileDrop.addEventListener("dragleave", () => elements.taskFileDrop.classList.remove("drag-over"));
 elements.taskFileDrop.addEventListener("drop", (e) => {
