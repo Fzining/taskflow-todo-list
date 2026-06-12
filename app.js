@@ -477,6 +477,10 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     registerServiceWorker();
   });
+  // Always reload when a new SW takes control (no manual cache-clear needed)
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    window.location.reload();
+  });
 }
 
 initAuth();
@@ -675,13 +679,21 @@ function openProfileDialog() {
 async function registerServiceWorker() {
   try {
     const registration = await navigator.serviceWorker.register("./sw.js");
-    await registration.update();
-
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("taskflow.reloaded-for-update") === "1") return;
-      sessionStorage.setItem("taskflow.reloaded-for-update", "1");
+    if (registration.waiting) {
+      // New SW already waiting — activate it now
       window.location.reload();
+      return;
+    }
+    registration.addEventListener("updatefound", () => {
+      const installing = registration.installing;
+      if (!installing) return;
+      installing.addEventListener("statechange", () => {
+        if (installing.state === "installed" && navigator.serviceWorker.controller) {
+          window.location.reload();
+        }
+      });
     });
+    await registration.update();
   } catch {
     // The app still works without offline support.
   }
