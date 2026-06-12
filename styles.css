@@ -1307,3 +1307,128 @@ menu {
   color: var(--faint);
   font-size: 11px;
 }
+
+/* Auth page */
+#authPage {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 24px 24px, rgba(24, 28, 32, 0.12) 0 2px, transparent 2.5px),
+    var(--surface);
+  background-size: 36px 36px;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  border-radius: 28px;
+  padding: 44px 36px;
+  text-align: center;
+}
+
+.auth-card h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  color: var(--primary);
+}
+
+.auth-subtitle {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.auth-card label {
+  text-align: left;
+}
+
+.auth-card input {
+  margin-bottom: 4px;
+}
+
+.auth-error {
+  min-height: 18px;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-button {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.auth-switch {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Profile dialog */
+.profile-header {
+  text-align: center;
+}
+
+.profile-avatar {
+  margin: 0 auto;
+  width: 72px;
+  height: 72px;
+}
+
+.profile-email {
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-name {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.profile-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  padding: 16px 0;
+  border-top: 1px solid var(--surface-line);
+  border-bottom: 1px solid var(--surface-line);
+}
+
+.profile-stat {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.profile-stat strong {
+  color: var(--primary);
+  font-size: 24px;
+}
+
+.profile-stat span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.profile-field {
+  margin-top: 4px;
+}
+
+/* Sidebar brand clickable */
+#profileTrigger {
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+#profileTrigger:hover {
+  transform: translateY(-1px);
+}

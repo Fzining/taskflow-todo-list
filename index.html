@@ -9,16 +9,55 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=28" />
+    <link rel="stylesheet" href="styles.css?v=30" />
   </head>
   <body>
-    <div class="app-shell">
+    <div id="authPage">
+      <div class="auth-card raised">
+        <div class="auth-step" id="authLogin">
+          <h1>Welcome to TaskFlow</h1>
+          <p class="auth-subtitle">Sign in to sync your tasks across devices</p>
+          <label>
+            <span>Email</span>
+            <input id="emailInput" type="email" placeholder="your@email.com" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="passwordInput" type="password" placeholder="Enter your password" autocomplete="current-password" />
+          </label>
+          <p class="auth-error" id="authError"></p>
+          <button class="primary-button auth-button" id="signInButton" type="button">Sign In</button>
+          <p class="auth-switch">Don't have an account? <button class="text-action" id="showRegisterButton" type="button">Create one</button></p>
+        </div>
+        <div class="auth-step" id="authRegister" style="display:none">
+          <h1>Create your account</h1>
+          <p class="auth-subtitle">A free account to keep your tasks in sync</p>
+          <label>
+            <span>Email</span>
+            <input id="regEmailInput" type="email" placeholder="your@email.com" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="regPasswordInput" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" />
+          </label>
+          <label>
+            <span>Confirm password</span>
+            <input id="regConfirmInput" type="password" placeholder="Re-enter your password" autocomplete="new-password" minlength="6" />
+          </label>
+          <p class="auth-error" id="regError"></p>
+          <button class="primary-button auth-button" id="createAccountButton" type="button">Create Account</button>
+          <p class="auth-switch">Already have an account? <button class="text-action" id="showLoginButton" type="button">Sign in</button></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-shell" style="display:none">
       <aside class="sidebar" aria-label="Task navigation">
-        <div class="brand-block">
+        <div class="brand-block" id="profileTrigger" role="button" tabindex="0" title="Open profile">
           <div class="avatar" aria-hidden="true">AR</div>
           <div>
             <h1>TaskFlow</h1>
-            <p>Alex Rivers</p>
+            <p id="userDisplayName">Loading...</p>
           </div>
         </div>
 
@@ -70,7 +109,7 @@
           <div class="desktop-grid">
             <section class="welcome-card raised">
               <div>
-                <p class="eyebrow">Good morning, Alex</p>
+                <p class="eyebrow" id="welcomeGreeting">Good morning</p>
                 <h2>You have <span id="priorityCount">0 high priority</span> tasks today.</h2>
               </div>
               <div class="action-row">
@@ -96,7 +135,7 @@
 
           <section class="mobile-summary">
             <div class="mobile-hero">
-              <h2>Good Morning, Alex</h2>
+              <h2 id="mobileGreeting">Good Morning</h2>
               <p>You have <span id="mobileOpenCount">0</span> tasks to complete today.</p>
             </div>
             <div class="stats-grid">
@@ -248,6 +287,35 @@
       <div class="detail-body" id="detailBody"></div>
     </dialog>
 
+    <dialog class="detail-dialog" id="profileDialog">
+      <div class="dialog-header">
+        <h2>Profile</h2>
+        <button class="icon-button" id="profileCloseButton" type="button" aria-label="Close">
+          <span class="icon" data-icon="x"></span>
+        </button>
+      </div>
+      <div class="detail-body">
+        <div class="profile-header">
+          <div class="avatar profile-avatar" aria-hidden="true"></div>
+          <p class="profile-email" id="profileEmail"></p>
+          <p class="profile-name" id="profileName"></p>
+        </div>
+        <div class="profile-stats">
+          <div class="profile-stat"><strong id="statTotal">0</strong><span>Total Tasks</span></div>
+          <div class="profile-stat"><strong id="statCompleted">0</strong><span>Completed</span></div>
+          <div class="profile-stat"><strong id="statFiles">0</strong><span>Files</span></div>
+        </div>
+        <label class="profile-field">
+          <span>Display name</span>
+          <input id="displayNameInput" type="text" placeholder="Your name" maxlength="30" />
+        </label>
+        <menu class="detail-actions">
+          <button class="soft-button" id="signOutButton" type="button">Sign Out</button>
+          <button class="primary-button" id="profileDoneButton" type="button">Done</button>
+        </menu>
+      </div>
+    </dialog>
+
     <dialog class="search-dialog" id="searchDialog">
       <form method="dialog">
         <div class="dialog-header">
@@ -264,6 +332,7 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=28" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js?v=30" type="module"></script>
   </body>
 </html>

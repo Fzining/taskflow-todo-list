@@ -9,9 +9,16 @@ const SUPABASE_REST_URL = "https://vzllsenewstwjbnplysm.supabase.co/rest/v1";
 const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_9y_vYoh3zmM_zph31oVj3g_3uw79IsX";
 const TASKS_TABLE = "taskflow_state";
-const TASKS_RECORD_ID = "default";
 const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+const supabase = window.supabase.createClient(
+  SUPABASE_REST_URL.replace("/rest/v1", ""),
+  SUPABASE_PUBLISHABLE_KEY,
+);
+
+let currentUserId = null;
+
 const priorityRank = {
   High: 0,
   Medium: 1,
@@ -265,6 +272,22 @@ const elements = {
   detailDialog: document.querySelector("#taskDetailDialog"),
   detailTitle: document.querySelector("#detailTitle"),
   detailBody: document.querySelector("#detailBody"),
+  authPage: document.querySelector("#authPage"),
+  authLogin: document.querySelector("#authLogin"),
+  authRegister: document.querySelector("#authRegister"),
+  authError: document.querySelector("#authError"),
+  regError: document.querySelector("#regError"),
+  appShell: document.querySelector(".app-shell"),
+  userDisplayName: document.querySelector("#userDisplayName"),
+  welcomeGreeting: document.querySelector("#welcomeGreeting"),
+  mobileGreeting: document.querySelector("#mobileGreeting"),
+  profileDialog: document.querySelector("#profileDialog"),
+  profileEmail: document.querySelector("#profileEmail"),
+  profileName: document.querySelector("#profileName"),
+  displayNameInput: document.querySelector("#displayNameInput"),
+  statTotal: document.querySelector("#statTotal"),
+  statCompleted: document.querySelector("#statCompleted"),
+  statFiles: document.querySelector("#statFiles"),
 };
 
 const pendingFiles = [];
@@ -440,9 +463,160 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-render();
-startCloudSync();
-startReminderEngine();
+initAuth();
+
+async function initAuth() {
+  // Auth UI event bindings
+  document.querySelector("#signInButton").addEventListener("click", () => {
+    const email = document.querySelector("#emailInput").value.trim();
+    const password = document.querySelector("#passwordInput").value;
+    handleSignIn(email, password);
+  });
+
+  document.querySelector("#createAccountButton").addEventListener("click", () => {
+    const email = document.querySelector("#regEmailInput").value.trim();
+    const password = document.querySelector("#regPasswordInput").value;
+    const confirm = document.querySelector("#regConfirmInput").value;
+    if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
+    if (password !== confirm) { elements.regError.textContent = "Passwords do not match."; return; }
+    handleSignUp(email, password);
+  });
+
+  document.querySelector("#showRegisterButton").addEventListener("click", () => {
+    elements.authLogin.style.display = "none";
+    elements.authRegister.style.display = "";
+    elements.authError.textContent = "";
+    elements.regError.textContent = "";
+  });
+
+  document.querySelector("#showLoginButton").addEventListener("click", () => {
+    elements.authRegister.style.display = "none";
+    elements.authLogin.style.display = "";
+    elements.authError.textContent = "";
+    elements.regError.textContent = "";
+  });
+
+  // Allow Enter key on inputs
+  document.querySelector("#passwordInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.querySelector("#signInButton").click();
+  });
+  document.querySelector("#regConfirmInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.querySelector("#createAccountButton").click();
+  });
+
+  // Profile dialog
+  document.querySelector("#profileTrigger").addEventListener("click", openProfileDialog);
+  document.querySelector("#profileCloseButton").addEventListener("click", () => elements.profileDialog.close());
+  document.querySelector("#profileDoneButton").addEventListener("click", () => {
+    const name = elements.displayNameInput.value.trim();
+    if (name) localStorage.setItem("taskflow.displayName", name);
+    updateUserDisplay();
+    elements.profileDialog.close();
+  });
+  document.querySelector("#signOutButton").addEventListener("click", handleSignOut);
+
+  elements.displayNameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.querySelector("#profileDoneButton").click();
+  });
+
+  // Check for existing session
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      currentUserId = session.user.id;
+      await onUserLoggedIn(session.user);
+    } else if (event === "SIGNED_OUT") {
+      currentUserId = null;
+    }
+  });
+
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user) {
+    currentUserId = data.session.user.id;
+    await onUserLoggedIn(data.session.user);
+  }
+}
+
+async function handleSignIn(email, password) {
+  if (!email || !password) { elements.authError.textContent = "Please enter both email and password."; return; }
+  elements.authError.textContent = "";
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { elements.authError.textContent = error.message; }
+}
+
+async function handleSignUp(email, password) {
+  if (!email || !password) { elements.regError.textContent = "Please enter both email and password."; return; }
+  if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
+  elements.regError.textContent = "";
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) { elements.regError.textContent = error.message; }
+}
+
+async function onUserLoggedIn(user) {
+  currentUserId = user.id;
+  // Pull remote tasks for this user
+  let synced = false;
+  try {
+    const response = await fetch(
+      `${SUPABASE_REST_URL}/${TASKS_TABLE}?id=eq.${currentUserId}&select=payload,updated_at&limit=1`,
+      { cache: "no-store", headers: await supabaseHeaders() },
+    );
+    if (response.ok) {
+      const rows = await response.json();
+      const remote = normalizeRemotePayload(rows[0]?.payload);
+      if (remote.tasks.length) {
+        const merged = mergeTasks(remote.tasks, state.tasks);
+        applyRemoteTasks(merged, remote.updatedAt);
+        synced = true;
+      }
+    }
+  } catch { /* network unavailable */ }
+
+  if (!synced && state.tasks.length) {
+    scheduleCloudSave(0);
+  }
+
+  // Show app, hide auth
+  elements.authPage.style.display = "none";
+  elements.appShell.style.display = "";
+  updateUserDisplay();
+  render();
+  startCloudSync();
+  startReminderEngine();
+}
+
+async function handleSignOut() {
+  elements.profileDialog.close();
+  state.syncTimer && clearInterval(state.syncTimer);
+  state.syncSaveTimer && clearTimeout(state.syncSaveTimer);
+  state.reminderScanTimer && clearInterval(state.reminderScanTimer);
+  await supabase.auth.signOut();
+  elements.appShell.style.display = "none";
+  elements.authPage.style.display = "";
+  elements.authLogin.style.display = "";
+  elements.authRegister.style.display = "none";
+}
+
+function updateUserDisplay() {
+  const displayName = localStorage.getItem("taskflow.displayName") || (currentUserId || "");
+  const shortName = displayName.includes("@") ? displayName.split("@")[0] : displayName;
+  elements.userDisplayName.textContent = shortName || "User";
+  elements.welcomeGreeting.textContent = "Good morning, " + (shortName || "there");
+  elements.mobileGreeting.textContent = "Good Morning, " + (shortName || "there");
+  elements.profileEmail.textContent = currentUserId || "";
+  elements.profileName.textContent = shortName || "User";
+  elements.displayNameInput.value = localStorage.getItem("taskflow.displayName") || "";
+}
+
+function openProfileDialog() {
+  updateUserDisplay();
+  const total = state.tasks.filter((t) => t.category !== "inbox").length;
+  const completed = state.tasks.filter((t) => t.completed).length;
+  const fileCount = state.tasks.reduce((sum, t) => sum + (Array.isArray(t.files) ? t.files.length : 0), 0);
+  elements.statTotal.textContent = total;
+  elements.statCompleted.textContent = completed;
+  elements.statFiles.textContent = fileCount;
+  elements.profileDialog.showModal();
+}
 
 async function registerServiceWorker() {
   try {
@@ -597,11 +771,12 @@ function startCloudSync() {
 
 async function syncFromCloud(options = {}) {
   try {
+    const uid = currentUserId || "default";
     const response = await fetch(
-      `${SUPABASE_REST_URL}/${TASKS_TABLE}?id=eq.${TASKS_RECORD_ID}&select=payload,updated_at&limit=1`,
+      `${SUPABASE_REST_URL}/${TASKS_TABLE}?id=eq.${uid}&select=payload,updated_at&limit=1`,
       {
         cache: "no-store",
-        headers: supabaseHeaders(),
+        headers: await supabaseHeaders(),
       },
     );
     if (!response.ok) throw new Error("Sync load failed");
@@ -655,12 +830,12 @@ async function pushTasksToCloud() {
     };
     const response = await fetch(`${SUPABASE_REST_URL}/${TASKS_TABLE}?on_conflict=id`, {
       method: "POST",
-      headers: supabaseHeaders({
+      headers: await supabaseHeaders({
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=representation",
       }),
       body: JSON.stringify({
-        id: TASKS_RECORD_ID,
+        id: currentUserId || "default",
         payload,
         updated_at: new Date(payload.updatedAt).toISOString(),
       }),
@@ -675,10 +850,15 @@ async function pushTasksToCloud() {
   }
 }
 
-function supabaseHeaders(extra = {}) {
+async function supabaseHeaders(extra = {}) {
+  let token = SUPABASE_PUBLISHABLE_KEY;
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) token = data.session.access_token;
+  } catch { /* use anon key */ }
   return {
     apikey: SUPABASE_PUBLISHABLE_KEY,
-    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    Authorization: `Bearer ${token}`,
     ...extra,
   };
 }
