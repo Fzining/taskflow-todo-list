@@ -415,15 +415,15 @@ function mergeTasks(remoteTasks, localTasks) {
 
 function renderBoard() {
   const groups = [
-    ["High", "High"],
-    ["Medium", "Medium"],
-    ["Done", "Completed"],
+    "High",
+    "Medium",
+    "Low",
   ];
   elements.taskList.innerHTML = groups
-    .map(([label, match]) => {
-      const tasks = getVisibleTasks().filter((task) => (match === "Completed" ? task.completed : task.priority === match && !task.completed));
+    .map((priority) => {
+      const tasks = getVisibleTasks().filter((task) => task.priority === priority);
       const cards = tasks.map((task) => taskTemplate(task)).join("") || '<div class="empty-state">Nothing yet.</div>';
-      return `<section class="board-column"><h3>${label}</h3>${cards}</section>`;
+      return `<section class="board-column"><h3>${priority}</h3>${cards}</section>`;
     })
     .join("");
   bindTaskButtons();
