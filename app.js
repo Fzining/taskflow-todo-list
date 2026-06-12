@@ -561,7 +561,7 @@ async function initAuth() {
 
   // Check for existing session
   if (loadAuthSession()) {
-    // Try to refresh the token
+    // Try to refresh or validate the token in background
     try {
       const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
         method: "POST",
@@ -571,13 +571,15 @@ async function initAuth() {
       if (res.ok) {
         const data = await res.json();
         saveAuthSession(data);
-        await onUserLoggedIn(null);
-        return;
       }
-    } catch { /* fail silently, show login */ }
-    clearAuthSession();
+    } catch { /* offline or refresh expired — still show the app */ }
+
+    // Always show the app if we have a stored session.
+    // If the token is expired, sync will just use the anon key until the user re-logs-in.
+    await onUserLoggedIn(null);
+    return;
   }
-  // Show login page
+  // No stored session at all — show login page
   elements.authPage.style.display = "";
   elements.appShell.style.display = "none";
 }
