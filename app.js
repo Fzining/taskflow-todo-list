@@ -12,28 +12,44 @@ const TASKS_TABLE = "taskflow_state";
 const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-let supabase = null;
-let supabaseReady = false;
-
-function getSupabase() {
-  if (!supabase && window.supabase) {
-    supabase = window.supabase.createClient(
-      SUPABASE_REST_URL.replace("/rest/v1", ""),
-      SUPABASE_PUBLISHABLE_KEY,
-    );
-    supabaseReady = true;
-  }
-  return supabase;
-}
-
-function ensureSupabase() {
-  const s = getSupabase();
-  if (!s) throw new Error("Auth service is still loading. Please wait a moment and try again.");
-  return s;
-}
+const AUTH_URL = SUPABASE_REST_URL.replace("/rest/v1", "/auth/v1");
+const AUTH_STORAGE_KEY = "taskflow.auth-session";
 
 let currentUserId = null;
 let currentUserEmail = "";
+let accessToken = null;
+let refreshToken = null;
+
+function saveAuthSession(data) {
+  const session = { accessToken: data.access_token, refreshToken: data.refresh_token, userId: data.user?.id, email: data.user?.email };
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  accessToken = session.accessToken;
+  refreshToken = session.refreshToken;
+  currentUserId = session.userId;
+  currentUserEmail = session.email;
+}
+
+function clearAuthSession() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  accessToken = null;
+  refreshToken = null;
+  currentUserId = null;
+  currentUserEmail = "";
+}
+
+function loadAuthSession() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY));
+    if (stored?.accessToken) {
+      accessToken = stored.accessToken;
+      refreshToken = stored.refreshToken;
+      currentUserId = stored.userId;
+      currentUserEmail = stored.email;
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
 
 const priorityRank = {
   High: 0,
@@ -544,55 +560,56 @@ async function initAuth() {
   });
 
   // Check for existing session
-  try {
-    const client = ensureSupabase();
-    client.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        currentUserId = session.user.id;
-        currentUserEmail = session.user.email || "";
-        await onUserLoggedIn(session.user);
-      } else if (event === "SIGNED_OUT") {
-        currentUserId = null;
-        currentUserEmail = "";
-        elements.appShell.style.display = "none";
-        elements.authPage.style.display = "";
+  if (loadAuthSession()) {
+    // Try to refresh the token
+    try {
+      const res = await fetch(`${AUTH_URL}/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        saveAuthSession(data);
+        await onUserLoggedIn(null);
+        return;
       }
-    });
-
-    const { data } = await client.auth.getSession();
-    if (data.session?.user) {
-      currentUserId = data.session.user.id;
-      currentUserEmail = data.session.user.email || "";
-      await onUserLoggedIn(data.session.user);
-      return;
-    }
-  } catch (e) {
-    elements.authError.textContent = "Auth service is still loading. Please try again in a moment.";
-    console.warn("Auth init failed:", e);
+    } catch { /* fail silently, show login */ }
+    clearAuthSession();
   }
-  // No session — show login page
+  // Show login page
   elements.authPage.style.display = "";
   elements.appShell.style.display = "none";
 }
 
 function friendlyAuthError(error) {
-  const msg = error.message || "";
+  const msg = (error && (error.message || error.error_description || error.msg || error.error)) || "";
   if (msg.includes("rate limit")) return "Too many attempts. Please wait a moment and try again.";
   if (msg.includes("Database error")) return "Server error. Please make sure the Supabase RLS SQL has been executed.";
-  if (msg.includes("Invalid login")) return "Incorrect email or password.";
+  if (msg.includes("Invalid login") || msg.includes("invalid")) return "Incorrect email or password.";
   if (msg.includes("already")) return "An account with this email already exists.";
-  return msg;
+  if (msg.includes("user not found")) return "No account found with this email.";
+  return msg || "Something went wrong. Please try again.";
 }
 
 async function handleSignIn(email, password) {
   if (!email || !password) { elements.authError.textContent = "Please enter both email and password."; return; }
   elements.authError.textContent = "";
   try {
-    const client = ensureSupabase();
-    const { error } = await client.auth.signInWithPassword({ email, password });
-    if (error) { elements.authError.textContent = friendlyAuthError(error); }
-  } catch (e) {
-    elements.authError.textContent = friendlyAuthError(e);
+    const res = await fetch(`${AUTH_URL}/token?grant_type=password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      elements.authError.textContent = friendlyAuthError({ message: data.error_description || data.msg || data.error || "Invalid credentials" });
+      return;
+    }
+    saveAuthSession(data);
+    await onUserLoggedIn(null);
+  } catch {
+    elements.authError.textContent = "Network error. Please check your connection.";
   }
 }
 
@@ -601,17 +618,52 @@ async function handleSignUp(email, password) {
   if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
   elements.regError.textContent = "";
   try {
-    const client = ensureSupabase();
-    const { error } = await client.auth.signUp({ email, password });
-    if (error) { elements.regError.textContent = friendlyAuthError(error); }
-  } catch (e) {
-    elements.regError.textContent = friendlyAuthError(e);
+    const res = await fetch(`${AUTH_URL}/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      elements.regError.textContent = friendlyAuthError({ message: data.error_description || data.msg || data.error || "Registration failed" });
+      return;
+    }
+    // Auto sign-in after sign-up
+    if (data.access_token) {
+      saveAuthSession(data);
+      await onUserLoggedIn(null);
+    } else {
+      elements.regError.textContent = "";
+      // Show confirmation message — email auto-confirm is on
+      await handleSignIn(email, password);
+    }
+  } catch {
+    elements.regError.textContent = "Network error. Please check your connection.";
   }
 }
 
-async function onUserLoggedIn(user) {
-  currentUserId = user.id;
-  currentUserEmail = user.email || "";
+async function handleSignOut() {
+  elements.profileDialog.close();
+  state.syncTimer && clearInterval(state.syncTimer);
+  state.syncSaveTimer && clearTimeout(state.syncSaveTimer);
+  state.reminderScanTimer && clearInterval(state.reminderScanTimer);
+  if (accessToken) {
+    try {
+      await fetch(`${AUTH_URL}/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({}),
+      });
+    } catch { /* ignore */ }
+  }
+  clearAuthSession();
+  elements.appShell.style.display = "none";
+  elements.authPage.style.display = "";
+  elements.authLogin.style.display = "";
+  elements.authRegister.style.display = "none";
+}
+
+async function onUserLoggedIn(_user) {
   // Pull remote tasks for this user
   let synced = false;
   try {
@@ -641,18 +693,6 @@ async function onUserLoggedIn(user) {
   render();
   startCloudSync();
   startReminderEngine();
-}
-
-async function handleSignOut() {
-  elements.profileDialog.close();
-  state.syncTimer && clearInterval(state.syncTimer);
-  state.syncSaveTimer && clearTimeout(state.syncSaveTimer);
-  state.reminderScanTimer && clearInterval(state.reminderScanTimer);
-  try { await ensureSupabase().auth.signOut(); } catch { /* ignore */ }
-  elements.appShell.style.display = "none";
-  elements.authPage.style.display = "";
-  elements.authLogin.style.display = "";
-  elements.authRegister.style.display = "none";
 }
 
 function updateUserDisplay() {
@@ -918,10 +958,7 @@ async function pushTasksToCloud() {
 
 async function supabaseHeaders(extra = {}) {
   let token = SUPABASE_PUBLISHABLE_KEY;
-  try {
-    const { data } = await ensureSupabase().auth.getSession();
-    if (data.session?.access_token) token = data.session.access_token;
-  } catch { /* use anon key */ }
+  if (accessToken) token = accessToken;
   return {
     apikey: SUPABASE_PUBLISHABLE_KEY,
     Authorization: `Bearer ${token}`,
