@@ -664,7 +664,6 @@ async function handleSignOut() {
 }
 
 async function onUserLoggedIn(_user) {
-  // Pull remote tasks for this user
   let synced = false;
   try {
     const response = await fetch(
@@ -675,15 +674,21 @@ async function onUserLoggedIn(_user) {
       const rows = await response.json();
       const remote = normalizeRemotePayload(rows[0]?.payload);
       if (remote.tasks.length) {
-        const merged = mergeTasks(remote.tasks, state.tasks);
-        applyRemoteTasks(merged, remote.updatedAt);
+        applyRemoteTasks(remote.tasks, remote.updatedAt);
         synced = true;
       }
     }
   } catch { /* network unavailable */ }
 
-  if (!synced && state.tasks.length) {
+  // Only push local tasks to cloud if they're real user data (not demo defaults)
+  if (!synced && state.tasks.length && hadLocalDataBeforeAuth) {
     scheduleCloudSave(0);
+  }
+
+  // Discard demo tasks for fresh accounts — replace with empty list
+  if (!hadLocalDataBeforeAuth && !synced) {
+    state.tasks = [];
+    saveTasks();
   }
 
   // Show app, hide auth
@@ -744,11 +749,14 @@ function loadTasks() {
   if (!stored) return defaultTasks.map(normalizeTask);
   try {
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.map(normalizeTask) : defaultTasks.map(normalizeTask);
+    return Array.isArray(parsed) ? parsed.map(normalizeTask) : [];
   } catch {
-    return defaultTasks.map(normalizeTask);
+    return [];
   }
 }
+
+// Track whether local data existed before user logged in
+let hadLocalDataBeforeAuth = Boolean(localStorage.getItem(STORAGE_KEY));
 
 function normalizeTask(task) {
   return {
