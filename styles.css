@@ -1428,10 +1428,17 @@ menu {
 #profileTriggerMobile {
   cursor: pointer;
   transition: transform 140ms ease;
-  outline: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+}
+
+#profileTrigger:focus,
+#profileTrigger:focus-visible,
+#profileTriggerMobile:focus,
+#profileTriggerMobile:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 #profileTrigger:hover,
