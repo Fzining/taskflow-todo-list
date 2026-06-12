@@ -216,6 +216,21 @@ elements.sortButton.addEventListener("click", () => {
 });
 document.querySelector("#searchButton").addEventListener("click", openSearch);
 
+let lastScrollY = 0;
+const fab = document.querySelector(".mobile-add-button");
+window.addEventListener("scroll", () => {
+  if (window.innerWidth > 880) return;
+  const scrolled = window.scrollY;
+  if (scrolled > lastScrollY && scrolled > 200) {
+    fab.style.transform = "translateY(140px)";
+    fab.style.transition = "transform 200ms ease";
+  } else if (scrolled < lastScrollY) {
+    fab.style.transform = "";
+    fab.style.transition = "transform 200ms ease";
+  }
+  lastScrollY = scrolled;
+}, { passive: true });
+
 document.querySelectorAll("[data-filter]").forEach((button) => {
   button.addEventListener("click", () => setFilter(button.dataset.filter));
 });
