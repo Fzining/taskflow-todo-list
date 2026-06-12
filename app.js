@@ -36,36 +36,38 @@ async function storeFile(file) {
   const db = await openFileDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FILE_STORE_NAME, "readwrite");
-    tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
-    db.close();
-    tx.oncomplete = () => resolve({ id, name: file.name, type: file.type, size: buffer.byteLength });
-    tx.onerror = () => reject(tx.error);
+    const store = tx.objectStore(FILE_STORE_NAME);
+    const meta = { id, name: file.name, type: file.type, size: buffer.byteLength };
+    store.put({ id, data: buffer, name: file.name, type: file.type });
+    tx.oncomplete = () => { db.close(); resolve(meta); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
   });
 }
 
 async function storeFiles(fileList) {
+  if (!fileList.length) return [];
   const db = await openFileDB();
-  let hadError = false;
-  const results = await Promise.all(
-    fileList.map(async (file) => {
-      try {
-        const id = createId();
-        const buffer = await file.arrayBuffer();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(FILE_STORE_NAME, "readwrite");
-          tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
-          tx.oncomplete = () => resolve({ id, name: file.name, type: file.type, size: buffer.byteLength });
-          tx.onerror = () => reject(tx.error);
-        });
-      } catch {
-        hadError = true;
-        return null;
-      }
-    }),
-  );
-  db.close();
-  if (hadError) console.warn("Some files failed to upload");
-  return results.filter(Boolean);
+  // Read all files into memory first
+  const items = [];
+  for (const file of fileList) {
+    try {
+      const id = createId();
+      const buffer = await file.arrayBuffer();
+      items.push({ id, data: buffer, name: file.name, type: file.type, size: buffer.byteLength });
+    } catch { /* skip unreadable file */ }
+  }
+  if (!items.length) { db.close(); return []; }
+  // Write all items in a single transaction
+  return new Promise((resolve) => {
+    const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+    const store = tx.objectStore(FILE_STORE_NAME);
+    items.forEach((item) => store.put(item));
+    tx.oncomplete = () => {
+      db.close();
+      resolve(items.map(({ data, ...meta }) => meta));
+    };
+    tx.onerror = () => { db.close(); resolve([]); };
+  });
 }
 
 async function loadFile(id) {
