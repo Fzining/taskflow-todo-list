@@ -37,9 +37,35 @@ async function storeFile(file) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FILE_STORE_NAME, "readwrite");
     tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
-    tx.oncomplete = () => { db.close(); resolve({ id, name: file.name, type: file.type, size: buffer.byteLength }); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+    db.close();
+    tx.oncomplete = () => resolve({ id, name: file.name, type: file.type, size: buffer.byteLength });
+    tx.onerror = () => reject(tx.error);
   });
+}
+
+async function storeFiles(fileList) {
+  const db = await openFileDB();
+  let hadError = false;
+  const results = await Promise.all(
+    fileList.map(async (file) => {
+      try {
+        const id = createId();
+        const buffer = await file.arrayBuffer();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+          tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
+          tx.oncomplete = () => resolve({ id, name: file.name, type: file.type, size: buffer.byteLength });
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch {
+        hadError = true;
+        return null;
+      }
+    }),
+  );
+  db.close();
+  if (hadError) console.warn("Some files failed to upload");
+  return results.filter(Boolean);
 }
 
 async function loadFile(id) {
@@ -248,6 +274,9 @@ const elements = {
   taskFileDrop: document.querySelector("#taskFileDrop"),
   taskFileInput: document.querySelector("#taskFileInput"),
   taskFileChips: document.querySelector("#taskFileChips"),
+  detailDialog: document.querySelector("#taskDetailDialog"),
+  detailTitle: document.querySelector("#detailTitle"),
+  detailBody: document.querySelector("#detailBody"),
 };
 
 const pendingFiles = [];
@@ -265,6 +294,8 @@ document.querySelectorAll("#taskDialog [data-dialog-close]").forEach((button) =>
     elements.taskDialog.close();
   });
 });
+document.querySelector("#detailCloseButton").addEventListener("click", () => elements.detailDialog.close());
+
 document.querySelector("#scheduleButton").addEventListener("click", () => {
   document.querySelector("#tasksSection").scrollIntoView({ behavior: "smooth", block: "start" });
 });
@@ -293,12 +324,14 @@ elements.taskFileInput.addEventListener("change", () => {
 });
 
 async function handleDialogFiles(fileList) {
-  for (const file of fileList) {
-    try {
-      const meta = await storeFile(file);
-      pendingFiles.push(meta);
-    } catch { /* file too large or IndexedDB unavailable */ }
-  }
+  elements.taskFileDrop.style.pointerEvents = "none";
+  elements.taskFileDrop.style.opacity = "0.5";
+  try {
+    const results = await storeFiles(fileList);
+    pendingFiles.push(...results);
+  } catch { /* IndexedDB unavailable */ }
+  elements.taskFileDrop.style.pointerEvents = "";
+  elements.taskFileDrop.style.opacity = "";
   renderDialogFileChips();
 }
 
@@ -336,6 +369,14 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("active", item === button));
     render();
   });
+});
+
+elements.taskList.addEventListener("click", (e) => {
+  const card = e.target.closest(".task-card");
+  if (!card) return;
+  if (e.target.closest("button, a")) return;
+  const task = state.tasks.find((item) => item.id === card.dataset.id);
+  if (task) openTaskDetail(task);
 });
 
 elements.taskForm.addEventListener("submit", (event) => {
@@ -892,6 +933,84 @@ function taskTemplate(task) {
       </div>
     </article>
   `;
+}
+
+function openTaskDetail(task) {
+  const t = normalizeTask(task);
+  elements.detailTitle.textContent = t.title;
+  const files = Array.isArray(t.files) ? t.files : [];
+
+  elements.detailBody.innerHTML = `
+    <div class="detail-section">
+      <div class="detail-meta">
+        <span class="detail-badge ${t.priority.toLowerCase()}">${escapeHtml(t.priority)}</span>
+        <span>${iconInline("clock")} ${formatTimeRange(t)}</span>
+        <span>${iconInline("calendar")} ${t.category === "today" ? "Today" : t.category === "upcoming" ? "Upcoming" : "Inbox"}</span>
+        ${t.completed ? `<span>${iconInline("check-circle")} Completed${t.completedAt ? " · " + t.completedAt : ""}</span>` : ""}
+      </div>
+      <p class="detail-description">${escapeHtml(t.details)}</p>
+    </div>
+    ${files.length ? `
+      <div class="detail-section">
+        <h3>Attachments (${files.length})</h3>
+        <div class="detail-files">
+          ${files.map((f) => `
+            <div class="detail-file-card" data-file-id="${f.id}">
+              ${isImageType(f.type)
+                ? `<img class="detail-file-preview" src="" data-file-id="${f.id}" alt="${escapeHtml(f.name)}" />`
+                : `<div class="detail-file-icon">${iconInline("file")}</div>`}
+              <div class="detail-file-info">
+                <span class="detail-file-name">${escapeHtml(f.name)}</span>
+                <span class="detail-file-size">${formatSize(f.size)}</span>
+              </div>
+              <button class="soft-button detail-file-download" data-file-id="${f.id}" type="button">Download</button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    ` : '<p class="detail-no-files">No attachments.</p>'}
+    <menu class="detail-actions">
+      <button class="soft-button" id="detailEditButton" type="button">Edit</button>
+      <button class="primary-button" id="detailCloseBottom" type="button">Close</button>
+    </menu>
+  `;
+
+  // Load image previews
+  elements.detailBody.querySelectorAll(".detail-file-preview[data-file-id]").forEach((img) => {
+    const id = img.dataset.fileId;
+    loadFile(id).then((record) => {
+      if (record) {
+        const blob = new Blob([record.data], { type: record.type });
+        img.src = URL.createObjectURL(blob);
+      }
+    });
+  });
+
+  // Download buttons
+  elements.detailBody.querySelectorAll(".detail-file-download[data-file-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const record = await loadFile(btn.dataset.fileId);
+      if (!record) return;
+      const blob = new Blob([record.data], { type: record.type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = record.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+
+  document.querySelector("#detailEditButton").addEventListener("click", () => {
+    elements.detailDialog.close();
+    openTaskDialog(task);
+  });
+
+  document.querySelector("#detailCloseBottom").addEventListener("click", () => {
+    elements.detailDialog.close();
+  });
+
+  elements.detailDialog.showModal();
 }
 
 function bindTaskButtons() {

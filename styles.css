@@ -478,6 +478,7 @@ button {
 
 .task-card:hover {
   transform: translateY(-1px);
+  cursor: pointer;
 }
 
 .task-card.completed {
@@ -1037,6 +1038,142 @@ menu {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Task detail dialog */
+.detail-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.detail-dialog .dialog-header {
+  padding: 24px 24px 0;
+}
+
+.detail-body {
+  padding: 24px;
+  display: grid;
+  gap: 24px;
+}
+
+.detail-section h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.detail-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-badge {
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--surface-high);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.detail-badge.high {
+  background: var(--danger-soft);
+  color: #93000a;
+}
+
+.detail-badge.low {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.detail-description {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.detail-files {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-file-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--surface-low);
+  box-shadow: var(--small-raised);
+}
+
+.detail-file-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.detail-file-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.detail-file-icon .icon {
+  width: 32px;
+  height: 32px;
+}
+
+.detail-file-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.detail-file-name {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-file-size {
+  font-size: 12px;
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.detail-no-files {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
 }
 
 /* File attachments */

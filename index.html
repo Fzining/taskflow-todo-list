@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=24" />
+    <link rel="stylesheet" href="styles.css?v=25" />
   </head>
   <body>
     <div class="app-shell">
@@ -238,6 +238,16 @@
       </form>
     </dialog>
 
+    <dialog class="detail-dialog" id="taskDetailDialog">
+      <div class="dialog-header">
+        <h2 id="detailTitle">Task Detail</h2>
+        <button class="icon-button" id="detailCloseButton" type="button" aria-label="Close">
+          <span class="icon" data-icon="x"></span>
+        </button>
+      </div>
+      <div class="detail-body" id="detailBody"></div>
+    </dialog>
+
     <dialog class="search-dialog" id="searchDialog">
       <form method="dialog">
         <div class="dialog-header">
@@ -254,6 +264,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=24" type="module"></script>
+    <script src="app.js?v=25" type="module"></script>
   </body>
 </html>
