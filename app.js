@@ -13,14 +13,23 @@ const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 let supabase = null;
+let supabaseReady = false;
+
 function getSupabase() {
   if (!supabase && window.supabase) {
     supabase = window.supabase.createClient(
       SUPABASE_REST_URL.replace("/rest/v1", ""),
       SUPABASE_PUBLISHABLE_KEY,
     );
+    supabaseReady = true;
   }
   return supabase;
+}
+
+function ensureSupabase() {
+  const s = getSupabase();
+  if (!s) throw new Error("Auth service is still loading. Please wait a moment and try again.");
+  return s;
 }
 
 let currentUserId = null;
@@ -532,7 +541,8 @@ async function initAuth() {
 
   // Check for existing session
   try {
-    getSupabase().auth.onAuthStateChange(async (event, session) => {
+    const client = ensureSupabase();
+    client.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         currentUserId = session.user.id;
         currentUserEmail = session.user.email || "";
@@ -545,7 +555,7 @@ async function initAuth() {
       }
     });
 
-    const { data } = await getSupabase().auth.getSession();
+    const { data } = await client.auth.getSession();
     if (data.session?.user) {
       currentUserId = data.session.user.id;
       currentUserEmail = data.session.user.email || "";
@@ -553,7 +563,8 @@ async function initAuth() {
       return;
     }
   } catch (e) {
-    console.warn("Auth init failed, showing login:", e);
+    elements.authError.textContent = "Auth service is still loading. Please try again in a moment.";
+    console.warn("Auth init failed:", e);
   }
   // No session — show login page
   elements.authPage.style.display = "";
@@ -572,16 +583,26 @@ function friendlyAuthError(error) {
 async function handleSignIn(email, password) {
   if (!email || !password) { elements.authError.textContent = "Please enter both email and password."; return; }
   elements.authError.textContent = "";
-  const { error } = await getSupabase().auth.signInWithPassword({ email, password });
-  if (error) { elements.authError.textContent = friendlyAuthError(error); }
+  try {
+    const client = ensureSupabase();
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) { elements.authError.textContent = friendlyAuthError(error); }
+  } catch (e) {
+    elements.authError.textContent = friendlyAuthError(e);
+  }
 }
 
 async function handleSignUp(email, password) {
   if (!email || !password) { elements.regError.textContent = "Please enter both email and password."; return; }
   if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
   elements.regError.textContent = "";
-  const { error } = await getSupabase().auth.signUp({ email, password });
-  if (error) { elements.regError.textContent = friendlyAuthError(error); }
+  try {
+    const client = ensureSupabase();
+    const { error } = await client.auth.signUp({ email, password });
+    if (error) { elements.regError.textContent = friendlyAuthError(error); }
+  } catch (e) {
+    elements.regError.textContent = friendlyAuthError(e);
+  }
 }
 
 async function onUserLoggedIn(user) {
@@ -623,7 +644,7 @@ async function handleSignOut() {
   state.syncTimer && clearInterval(state.syncTimer);
   state.syncSaveTimer && clearTimeout(state.syncSaveTimer);
   state.reminderScanTimer && clearInterval(state.reminderScanTimer);
-  await getSupabase().auth.signOut();
+  try { await ensureSupabase().auth.signOut(); } catch { /* ignore */ }
   elements.appShell.style.display = "none";
   elements.authPage.style.display = "";
   elements.authLogin.style.display = "";
@@ -886,7 +907,7 @@ async function pushTasksToCloud() {
 async function supabaseHeaders(extra = {}) {
   let token = SUPABASE_PUBLISHABLE_KEY;
   try {
-    const { data } = await getSupabase().auth.getSession();
+    const { data } = await ensureSupabase().auth.getSession();
     if (data.session?.access_token) token = data.session.access_token;
   } catch { /* use anon key */ }
   return {
