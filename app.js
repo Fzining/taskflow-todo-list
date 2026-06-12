@@ -18,6 +18,61 @@ const priorityRank = {
   Low: 2,
 };
 
+const FILE_STORE_DB = "taskflow-files-v1";
+const FILE_STORE_NAME = "files";
+
+function openFileDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FILE_STORE_DB, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(FILE_STORE_NAME, { keyPath: "id" }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeFile(file) {
+  const id = createId();
+  const buffer = await file.arrayBuffer();
+  const db = await openFileDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+    tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
+    tx.oncomplete = () => { db.close(); resolve({ id, name: file.name, type: file.type, size: buffer.byteLength }); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function loadFile(id) {
+  const db = await openFileDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE_NAME, "readonly");
+    const req = tx.objectStore(FILE_STORE_NAME).get(id);
+    req.onsuccess = () => { db.close(); resolve(req.result || null); };
+    req.onerror = () => { db.close(); reject(req.error); };
+  });
+}
+
+async function removeFile(id) {
+  const db = await openFileDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+    tx.objectStore(FILE_STORE_NAME).delete(id);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function removeFiles(ids) {
+  const db = await openFileDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+    const store = tx.objectStore(FILE_STORE_NAME);
+    ids.forEach((id) => store.delete(id));
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
 const defaultTasks = [
   {
     id: createId(),
@@ -30,7 +85,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "High",
     category: "today",
-    files: 2,
+    files: [],
     team: "",
     completed: false,
     createdAt: Date.now() - 80000,
@@ -46,7 +101,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "Medium",
     category: "today",
-    files: 0,
+    files: [],
     team: "Team Sync",
     completed: false,
     createdAt: Date.now() - 70000,
@@ -62,7 +117,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "Low",
     category: "today",
-    files: 0,
+    files: [],
     team: "",
     completed: true,
     completedAt: "9:15 AM",
@@ -79,7 +134,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "Medium",
     category: "today",
-    files: 0,
+    files: [],
     team: "2 members",
     completed: false,
     createdAt: Date.now() - 50000,
@@ -95,7 +150,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "Low",
     category: "today",
-    files: 0,
+    files: [],
     team: "",
     completed: true,
     completedAt: "9:30 AM",
@@ -112,7 +167,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "Low",
     category: "inbox",
-    files: 0,
+    files: [],
     team: "",
     completed: false,
     createdAt: Date.now() - 30000,
@@ -128,7 +183,7 @@ const defaultTasks = [
     endReminderMinutes: null,
     priority: "High",
     category: "upcoming",
-    files: 1,
+    files: [],
     team: "Team Sync",
     completed: false,
     createdAt: Date.now() - 20000,
@@ -190,7 +245,12 @@ const elements = {
   searchDialog: document.querySelector("#searchDialog"),
   searchInput: document.querySelector("#searchInput"),
   searchResults: document.querySelector("#searchResults"),
+  taskFileDrop: document.querySelector("#taskFileDrop"),
+  taskFileInput: document.querySelector("#taskFileInput"),
+  taskFileChips: document.querySelector("#taskFileChips"),
 };
+
+const pendingFiles = [];
 
 document.querySelectorAll(".icon[data-icon]").forEach((node) => {
   node.innerHTML = icons[node.dataset.icon] ?? "";
@@ -215,6 +275,56 @@ elements.sortButton.addEventListener("click", () => {
   render();
 });
 document.querySelector("#searchButton").addEventListener("click", openSearch);
+
+// File drop zone in task dialog
+elements.taskFileDrop.addEventListener("click", (e) => {
+  if (e.target !== elements.taskFileInput) elements.taskFileInput.click();
+});
+elements.taskFileDrop.addEventListener("dragover", (e) => { e.preventDefault(); elements.taskFileDrop.classList.add("drag-over"); });
+elements.taskFileDrop.addEventListener("dragleave", () => elements.taskFileDrop.classList.remove("drag-over"));
+elements.taskFileDrop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  elements.taskFileDrop.classList.remove("drag-over");
+  handleDialogFiles(Array.from(e.dataTransfer.files));
+});
+elements.taskFileInput.addEventListener("change", () => {
+  handleDialogFiles(Array.from(elements.taskFileInput.files));
+  elements.taskFileInput.value = "";
+});
+
+async function handleDialogFiles(fileList) {
+  for (const file of fileList) {
+    try {
+      const meta = await storeFile(file);
+      pendingFiles.push(meta);
+    } catch { /* file too large or IndexedDB unavailable */ }
+  }
+  renderDialogFileChips();
+}
+
+function renderDialogFileChips() {
+  elements.taskFileChips.innerHTML = pendingFiles.map((f) => `
+    <span class="file-chip">
+      <span class="file-chip-icon">${isImageType(f.type) ? iconInline("check") : iconInline("file")}</span>
+      <span class="file-chip-name" title="${escapeHtml(f.name)}">${escapeHtml(truncate(f.name, 24))}</span>
+      <span class="file-chip-size">${formatSize(f.size)}</span>
+      <button class="file-chip-remove" data-file-id="${f.id}" type="button" aria-label="Remove file">&times;</button>
+    </span>
+  `).join("");
+
+  elements.taskFileChips.querySelectorAll(".file-chip-remove").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.fileId;
+      await removeFile(id);
+      pendingFiles.splice(pendingFiles.findIndex((f) => f.id === id), 1);
+      renderDialogFileChips();
+    });
+  });
+}
+
+function isImageType(mime) { return mime.startsWith("image/"); }
+function truncate(str, max) { return str.length <= max ? str : str.slice(0, max - 3) + "..."; }
+function formatSize(bytes) { return bytes < 1024 ? `${bytes}B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)}KB` : `${(bytes / 1048576).toFixed(1)}MB`; }
 
 document.querySelectorAll("[data-filter]").forEach((button) => {
   button.addEventListener("click", () => setFilter(button.dataset.filter));
@@ -262,12 +372,12 @@ elements.taskForm.addEventListener("submit", (event) => {
   }
 
   if (editingId) {
-    state.tasks = state.tasks.map((task) => (task.id === editingId ? { ...task, ...taskData, updatedAt: Date.now() } : task));
+    state.tasks = state.tasks.map((task) => (task.id === editingId ? { ...task, ...taskData, files: [...(task.files || []), ...pendingFiles], updatedAt: Date.now() } : task));
   } else {
     state.tasks.unshift({
       id: createId(),
       ...taskData,
-      files: 0,
+      files: [...pendingFiles],
       team: "",
       completed: false,
       createdAt: Date.now(),
@@ -279,6 +389,8 @@ elements.taskForm.addEventListener("submit", (event) => {
   }
 
   saveTasks();
+  pendingFiles.length = 0;
+  renderDialogFileChips();
   const nextFilter = taskData.category;
   resetTaskDialog();
   elements.taskDialog.close();
@@ -338,6 +450,7 @@ function normalizeTask(task) {
     date: task.date || localDateString(),
     startReminderMinutes: task.startReminderMinutes ?? null,
     endReminderMinutes: task.endReminderMinutes ?? task.reminderMinutes ?? null,
+    files: Array.isArray(task.files) ? task.files : [],
   };
 }
 
@@ -391,6 +504,8 @@ function openTaskDialog(task = null) {
     document.querySelector("#taskEndReminderMinutes").value = normalizedTask.endReminderMinutes ?? "";
     document.querySelector("#taskCategory").value = normalizedTask.category || "today";
     document.querySelector("#taskPriority").value = normalizedTask.priority || "Medium";
+    pendingFiles.push(...(normalizedTask.files || []));
+    renderDialogFileChips();
   } else {
     const category = state.filter === "completed" || state.filter === "inbox" ? "today" : state.filter;
     document.querySelector("#taskDate").value = category === "upcoming" ? addDays(localDateString(), 1) : localDateString();
@@ -406,6 +521,8 @@ function resetTaskDialog() {
   delete elements.taskForm.dataset.editingId;
   elements.taskDialogTitle.textContent = "New Task";
   elements.taskSubmitButton.textContent = "Create Task";
+  pendingFiles.length = 0;
+  renderDialogFileChips();
 }
 
 function openSearch() {
@@ -443,6 +560,7 @@ function render() {
     ? tasks.map((task) => taskTemplate(task)).join("")
     : '<div class="empty-state">No tasks here yet. Create one when you are ready.</div>';
   bindTaskButtons();
+  bindFileActions();
 }
 
 function startCloudSync() {
@@ -569,6 +687,7 @@ function renderBoard() {
     })
     .join("");
   bindTaskButtons();
+  bindFileActions();
 }
 
 function renderNotes() {
@@ -624,7 +743,7 @@ function renderNotes() {
       endReminderMinutes: null,
       priority: "Low",
       category: "inbox",
-      files: 0,
+      files: [],
       team: "",
       completed: false,
       createdAt: Date.now(),
@@ -747,7 +866,7 @@ function taskTemplate(task) {
     : `
       <span>${iconInline("clock")} ${formatTimeRange(normalizedTask)}</span>
       ${reminderLabel ? `<span>${iconInline("bell")} ${escapeHtml(reminderLabel)}</span>` : ""}
-      ${normalizedTask.files ? `<span>${iconInline("file")} ${normalizedTask.files} Files</span>` : ""}
+      ${normalizedTask.files && normalizedTask.files.length ? renderTaskFileChips(normalizedTask.files) : ""}
       ${normalizedTask.team ? `<span class="team-meta">${iconInline("group")} ${escapeHtml(normalizedTask.team)}</span>` : ""}
     `;
 
@@ -801,6 +920,10 @@ function bindTaskButtons() {
         });
       }
       if (button.dataset.action === "delete") {
+        const task = state.tasks.find((item) => item.id === id);
+        if (task && Array.isArray(task.files) && task.files.length) {
+          removeFiles(task.files.map((f) => f.id));
+        }
         state.tasks = state.tasks.filter((item) => item.id !== id);
       }
       saveTasks();
@@ -1077,6 +1200,47 @@ function addDays(value, days) {
 
 function iconInline(name) {
   return `<span class="icon">${icons[name] ?? ""}</span>`;
+}
+
+function renderTaskFileChips(files) {
+  if (!files || !files.length) return "";
+  const shown = files.slice(0, 3);
+  const overflow = files.length > 3 ? `<span class="file-overflow">+${files.length - 3} more</span>` : "";
+  return shown.map((f) => `
+    <span class="task-file-chip" data-file-id="${f.id}">
+      ${isImageType(f.type) ? `<img class="task-file-thumb" src="" data-file-id="${f.id}" alt="${escapeHtml(f.name)}" />` : iconInline("file")}
+      <a class="file-download-link" href="#" data-file-id="${f.id}" title="${escapeHtml(f.name)}">${escapeHtml(truncate(f.name, 16))}</a>
+    </span>
+  `).join("") + overflow;
+}
+
+function bindFileActions() {
+  document.querySelectorAll(".task-file-thumb[data-file-id]").forEach((img) => {
+    const id = img.dataset.fileId;
+    if (img.src) return;
+    loadFile(id).then((record) => {
+      if (record) {
+        const blob = new Blob([record.data], { type: record.type });
+        img.src = URL.createObjectURL(blob);
+      }
+    });
+  });
+
+  document.querySelectorAll(".file-download-link[data-file-id]").forEach((link) => {
+    link.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const record = await loadFile(link.dataset.fileId);
+      if (!record) return;
+      const blob = new Blob([record.data], { type: record.type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = record.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
 }
 
 function escapeHtml(value) {

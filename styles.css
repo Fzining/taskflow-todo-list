@@ -1038,3 +1038,126 @@ menu {
     grid-template-columns: 1fr;
   }
 }
+
+/* File attachments */
+.file-attach-area {
+  display: grid;
+  gap: 10px;
+}
+
+.file-drop-zone {
+  display: grid;
+  gap: 4px;
+  border: 2px dashed var(--surface-line);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.file-drop-zone:hover,
+.file-drop-zone.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.file-drop-zone .field-hint {
+  font-weight: 700;
+}
+
+.file-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface-low);
+  box-shadow: var(--small-raised);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.file-chip-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.file-chip-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.file-chip-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.file-chip-size {
+  color: var(--faint);
+}
+
+.file-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--surface-high);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-chip-remove:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Task card file chips */
+.task-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.task-file-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.file-download-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.file-download-link:hover {
+  text-decoration: underline;
+}
+
+.file-overflow {
+  color: var(--faint);
+  font-size: 11px;
+}
