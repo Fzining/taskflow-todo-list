@@ -1,7 +1,7 @@
-const CACHE_NAME = "taskflow-pwa-v36";
+const CACHE_NAME = "taskflow-pwa-v37";
 const APP_SHELL = [
-  "./styles.css?v=33",
-  "./app.js?v=33",
+  "./styles.css?v=37",
+  "./app.js?v=37",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",
