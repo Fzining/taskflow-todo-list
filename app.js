@@ -147,6 +147,7 @@ document.querySelectorAll(".icon[data-icon]").forEach((node) => {
 });
 
 document.querySelector("#newTaskButton").addEventListener("click", openTaskDialog);
+document.querySelector("#newTaskMobileButton").addEventListener("click", openTaskDialog);
 document.querySelector("#quickAddDesktop").addEventListener("click", openTaskDialog);
 document.querySelectorAll("#taskDialog [data-dialog-close]").forEach((button) => {
   button.addEventListener("click", () => {

@@ -591,6 +591,10 @@ button {
   display: none;
 }
 
+.mobile-add-button {
+  display: none;
+}
+
 .icon {
   display: inline-grid;
   width: 20px;
@@ -880,6 +884,27 @@ menu {
     border-radius: 18px 18px 0 0;
     background: rgba(247, 249, 255, 0.96);
     box-shadow: -8px -8px 16px #ffffff, 8px 8px 16px #d1d9e6;
+  }
+
+  .mobile-add-button {
+    position: fixed;
+    right: 22px;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    z-index: 13;
+    display: grid;
+    width: 56px;
+    height: 56px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: var(--small-raised);
+    color: #fff;
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+
+  .mobile-add-button:active {
+    transform: translateY(1px) scale(0.96);
+    box-shadow: var(--small-pressed);
   }
 
   .mobile-nav-item {
