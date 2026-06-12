@@ -1,4 +1,8 @@
 const STORAGE_KEY = "taskflow.tasks.v1";
+const SYNC_META_KEY = "taskflow.sync-meta.v1";
+const SYNC_INTERVAL_MS = 5000;
+const API_ORIGIN = window.location.hostname.endsWith("github.io") ? "https://taskflow-todo-list-omega.vercel.app" : "";
+const TASKS_API_URL = `${API_ORIGIN}/api/tasks`;
 const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const priorityRank = {
@@ -121,8 +125,13 @@ const icons = {
 
 const state = {
   tasks: loadTasks(),
+  hasStoredTasks: Boolean(localStorage.getItem(STORAGE_KEY)),
   filter: "today",
   view: "list",
+  sync: loadSyncMeta(),
+  syncTimer: null,
+  syncSaveTimer: null,
+  isApplyingRemote: false,
 };
 
 const elements = {
@@ -204,6 +213,7 @@ if ("serviceWorker" in navigator) {
 }
 
 render();
+startCloudSync();
 
 async function registerServiceWorker() {
   try {
@@ -231,8 +241,26 @@ function loadTasks() {
   }
 }
 
+function loadSyncMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_META_KEY)) || { updatedAt: 0 };
+  } catch {
+    return { updatedAt: 0 };
+  }
+}
+
 function saveTasks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+  state.hasStoredTasks = true;
+  if (!state.isApplyingRemote) {
+    state.sync.updatedAt = Date.now();
+    saveSyncMeta();
+    scheduleCloudSave();
+  }
+}
+
+function saveSyncMeta() {
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify(state.sync));
 }
 
 function openTaskDialog() {
@@ -270,6 +298,83 @@ function render() {
     ? tasks.map((task) => taskTemplate(task)).join("")
     : '<div class="empty-state">No tasks here yet. Create one when you are ready.</div>';
   bindTaskButtons();
+}
+
+function startCloudSync() {
+  syncFromCloud({ seedCloudWhenEmpty: true });
+  window.addEventListener("online", () => syncFromCloud({ seedCloudWhenEmpty: true }));
+  state.syncTimer = window.setInterval(() => syncFromCloud(), SYNC_INTERVAL_MS);
+}
+
+async function syncFromCloud(options = {}) {
+  try {
+    const response = await fetch(TASKS_API_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error("Sync load failed");
+
+    const remote = await response.json();
+    const remoteUpdatedAt = Number(remote.updatedAt || 0);
+    const remoteTasks = Array.isArray(remote.tasks) ? remote.tasks : [];
+
+    if (!remoteUpdatedAt && options.seedCloudWhenEmpty && state.tasks.length) {
+      scheduleCloudSave(0);
+      return;
+    }
+
+    if (remoteUpdatedAt > Number(state.sync.updatedAt || 0) && state.hasStoredTasks && !state.sync.updatedAt) {
+      const mergedTasks = mergeTasks(remoteTasks, state.tasks);
+      applyRemoteTasks(mergedTasks, remoteUpdatedAt);
+      scheduleCloudSave(0);
+      return;
+    }
+
+    if (remoteUpdatedAt > Number(state.sync.updatedAt || 0)) {
+      applyRemoteTasks(remoteTasks, remoteUpdatedAt);
+    }
+  } catch {
+    // Keep the local app usable; the next interval or online event will retry.
+  }
+}
+
+function applyRemoteTasks(tasks, updatedAt) {
+  state.isApplyingRemote = true;
+  state.tasks = tasks;
+  state.sync.updatedAt = updatedAt;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+  state.hasStoredTasks = true;
+  saveSyncMeta();
+  state.isApplyingRemote = false;
+  render();
+}
+
+function scheduleCloudSave(delay = 350) {
+  window.clearTimeout(state.syncSaveTimer);
+  state.syncSaveTimer = window.setTimeout(pushTasksToCloud, delay);
+}
+
+async function pushTasksToCloud() {
+  try {
+    const response = await fetch(TASKS_API_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks: state.tasks, updatedAt: state.sync.updatedAt }),
+    });
+    if (!response.ok) throw new Error("Sync save failed");
+
+    const saved = await response.json();
+    state.sync.updatedAt = Number(saved.updatedAt || state.sync.updatedAt);
+    saveSyncMeta();
+  } catch {
+    // Local changes remain saved and will retry on the next user change/online event.
+  }
+}
+
+function mergeTasks(remoteTasks, localTasks) {
+  const byId = new Map();
+  [...remoteTasks, ...localTasks].forEach((task) => {
+    if (!task?.id) return;
+    byId.set(task.id, { ...byId.get(task.id), ...task });
+  });
+  return [...byId.values()];
 }
 
 function renderBoard() {
