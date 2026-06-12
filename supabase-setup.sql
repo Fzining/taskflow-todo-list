@@ -6,31 +6,19 @@ create table if not exists public.taskflow_state (
 
 alter table public.taskflow_state enable row level security;
 
+-- Drop old anon policies (migrate from shared to per-user)
 drop policy if exists "TaskFlow shared state can be read" on public.taskflow_state;
 drop policy if exists "TaskFlow shared state can be inserted" on public.taskflow_state;
 drop policy if exists "TaskFlow shared state can be updated" on public.taskflow_state;
 
-create policy "TaskFlow shared state can be read"
-on public.taskflow_state
-for select
-to anon
-using (id = 'default');
+-- Per-user authenticated policies
+create policy "Users can read own state" on public.taskflow_state
+  for select to authenticated using (id = auth.uid());
 
-create policy "TaskFlow shared state can be inserted"
-on public.taskflow_state
-for insert
-to anon
-with check (id = 'default');
+create policy "Users can insert own state" on public.taskflow_state
+  for insert to authenticated with check (id = auth.uid());
 
-create policy "TaskFlow shared state can be updated"
-on public.taskflow_state
-for update
-to anon
-using (id = 'default')
-with check (id = 'default');
+create policy "Users can update own state" on public.taskflow_state
+  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
-grant select, insert, update on public.taskflow_state to anon;
-
-insert into public.taskflow_state (id, payload)
-values ('default', '{"tasks":[],"updatedAt":0}'::jsonb)
-on conflict (id) do nothing;
+grant select, insert, update on public.taskflow_state to authenticated;
