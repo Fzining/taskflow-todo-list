@@ -217,16 +217,17 @@ elements.sortButton.addEventListener("click", () => {
 document.querySelector("#searchButton").addEventListener("click", openSearch);
 
 let lastScrollY = 0;
+let fabHidden = false;
 const fab = document.querySelector(".mobile-add-button");
 window.addEventListener("scroll", () => {
-  if (window.innerWidth > 880) return;
+  if (!fab || window.innerWidth > 880) return;
   const scrolled = window.scrollY;
-  if (scrolled > lastScrollY && scrolled > 200) {
+  if (scrolled > lastScrollY && scrolled > 200 && !fabHidden) {
     fab.style.transform = "translateY(140px)";
-    fab.style.transition = "transform 200ms ease";
-  } else if (scrolled < lastScrollY) {
+    fabHidden = true;
+  } else if (scrolled < lastScrollY && fabHidden) {
     fab.style.transform = "";
-    fab.style.transition = "transform 200ms ease";
+    fabHidden = false;
   }
   lastScrollY = scrolled;
 }, { passive: true });
