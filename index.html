@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f9ff" />
+    <meta name="description" content="TaskFlow is an installable neumorphic to-do list app for desktop and mobile." />
+    <title>TaskFlow</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Task navigation">
+        <div class="brand-block">
+          <div class="avatar" aria-hidden="true">AR</div>
+          <div>
+            <h1>TaskFlow</h1>
+            <p>Alex Rivers</p>
+          </div>
+        </div>
+
+        <nav class="side-nav">
+          <button class="nav-item active" data-filter="today" type="button">
+            <span class="icon" data-icon="calendar"></span>
+            <span>Today</span>
+          </button>
+          <button class="nav-item" data-filter="inbox" type="button">
+            <span class="icon" data-icon="inbox"></span>
+            <span>Inbox</span>
+          </button>
+          <button class="nav-item" data-filter="upcoming" type="button">
+            <span class="icon" data-icon="clock"></span>
+            <span>Upcoming</span>
+          </button>
+          <button class="nav-item" data-filter="completed" type="button">
+            <span class="icon" data-icon="check-circle"></span>
+            <span>Completed</span>
+          </button>
+        </nav>
+
+        <div class="workspace-card inset">
+          <div>
+            <p>Personal Workspace</p>
+            <strong><span id="pendingCount">0</span> Pending Tasks</strong>
+          </div>
+          <button class="icon-button" id="quickAddDesktop" type="button" aria-label="Create task">
+            <span class="icon" data-icon="plus"></span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div class="mobile-brand">
+            <div class="avatar" aria-hidden="true">AR</div>
+            <h1>TaskFlow</h1>
+          </div>
+          <h2 class="desktop-title">Dashboard</h2>
+          <div class="topbar-actions">
+            <button class="icon-button" id="searchButton" type="button" aria-label="Search tasks">
+              <span class="icon" data-icon="search"></span>
+            </button>
+          </div>
+        </header>
+
+        <section class="content-canvas" aria-live="polite">
+          <div class="desktop-grid">
+            <section class="welcome-card raised">
+              <div>
+                <p class="eyebrow">Good morning, Alex</p>
+                <h2>You have <span id="priorityCount">0 high priority</span> tasks today.</h2>
+              </div>
+              <div class="action-row">
+                <button class="primary-button" id="newTaskButton" type="button">
+                  <span class="icon" data-icon="add-task"></span>
+                  <span>New Task</span>
+                </button>
+                <button class="soft-button" id="scheduleButton" type="button">View Schedule</button>
+              </div>
+            </section>
+
+            <section class="progress-card raised">
+              <p class="eyebrow">Daily Progress</p>
+              <div class="progress-ring" style="--progress: 70">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                  <circle class="track" cx="60" cy="60" r="48"></circle>
+                  <circle class="meter" cx="60" cy="60" r="48"></circle>
+                </svg>
+                <strong id="progressLabel">70%</strong>
+              </div>
+            </section>
+          </div>
+
+          <section class="mobile-summary">
+            <div class="mobile-hero">
+              <h2>Good Morning, Alex</h2>
+              <p>You have <span id="mobileOpenCount">0</span> tasks to complete today.</p>
+            </div>
+            <div class="stats-grid">
+              <article class="stat-card raised">
+                <div class="small-ring" style="--progress: 65">
+                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <circle class="track" cx="24" cy="24" r="18"></circle>
+                    <circle class="meter" cx="24" cy="24" r="18"></circle>
+                  </svg>
+                  <strong id="mobileProgressLabel">65%</strong>
+                </div>
+                <span>Daily Goal</span>
+              </article>
+              <div class="stacked-stats">
+                <article class="mini-stat raised">
+                  <strong id="completedCount">0</strong>
+                  <span>Completed</span>
+                </article>
+                <article class="mini-stat raised">
+                  <strong class="danger" id="overdueCount">0</strong>
+                  <span>Overdue</span>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="tasks-section" id="tasksSection">
+            <div class="section-header">
+              <h2 id="sectionTitle">Today's Focus</h2>
+              <div class="view-switch" role="group" aria-label="Task view">
+                <button class="active" data-view="list" type="button">List</button>
+                <button data-view="board" type="button">Board</button>
+              </div>
+              <button class="see-all" id="seeAllButton" type="button">See All</button>
+            </div>
+            <div class="task-list" id="taskList"></div>
+          </section>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Mobile task navigation">
+        <button class="mobile-nav-item" data-filter="inbox" type="button">
+          <span class="icon" data-icon="inbox"></span>
+          <span>Inbox</span>
+        </button>
+        <button class="mobile-nav-item active" data-filter="today" type="button">
+          <span class="icon" data-icon="calendar"></span>
+          <span>Today</span>
+        </button>
+        <button class="mobile-nav-item" data-filter="upcoming" type="button">
+          <span class="icon" data-icon="clock"></span>
+          <span>Upcoming</span>
+        </button>
+        <button class="mobile-nav-item" data-filter="completed" type="button">
+          <span class="icon" data-icon="check-circle"></span>
+          <span>Done</span>
+        </button>
+      </nav>
+    </div>
+
+    <dialog class="task-dialog" id="taskDialog">
+      <form method="dialog" id="taskForm">
+        <div class="dialog-header">
+          <h2>New Task</h2>
+          <button class="icon-button" data-dialog-close type="button" aria-label="Close">
+            <span class="icon" data-icon="x"></span>
+          </button>
+        </div>
+        <label>
+          <span>Title</span>
+          <input id="taskTitle" name="title" required maxlength="80" autocomplete="off" />
+        </label>
+        <label>
+          <span>Details</span>
+          <textarea id="taskDetails" name="details" rows="3" maxlength="180"></textarea>
+        </label>
+        <div class="form-grid">
+          <label>
+            <span>Time</span>
+            <input id="taskTime" name="time" type="time" required />
+          </label>
+          <label>
+            <span>Priority</span>
+            <select id="taskPriority" name="priority">
+              <option>High</option>
+              <option selected>Medium</option>
+              <option>Low</option>
+            </select>
+          </label>
+        </div>
+        <menu>
+          <button class="soft-button" data-dialog-close type="button">Cancel</button>
+          <button class="primary-button" value="default" type="submit">Create Task</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="search-dialog" id="searchDialog">
+      <form method="dialog">
+        <div class="dialog-header">
+          <h2>Search</h2>
+          <button class="icon-button" value="cancel" type="submit" aria-label="Close">
+            <span class="icon" data-icon="x"></span>
+          </button>
+        </div>
+        <label>
+          <span>Find a task</span>
+          <input id="searchInput" autocomplete="off" placeholder="Search title or detail" />
+        </label>
+        <div class="search-results" id="searchResults"></div>
+      </form>
+    </dialog>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
