@@ -427,11 +427,12 @@ button {
   color: var(--primary);
 }
 
-.see-all {
-  display: none;
+.sort-toggle {
+  display: inline-flex;
   background: transparent;
   color: var(--primary);
   font-weight: 800;
+  font-size: 14px;
 }
 
 .task-list {
@@ -731,6 +732,77 @@ menu {
   font-size: 12px;
 }
 
+.note-list {
+  display: grid;
+  gap: 18px;
+  max-width: 680px;
+}
+
+.note-composer {
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.note-composer textarea {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--surface-low);
+  color: var(--text);
+  font-size: 15px;
+  resize: vertical;
+  outline: 2px solid transparent;
+  box-shadow: var(--small-pressed);
+}
+
+.note-composer textarea:focus {
+  outline-color: rgba(29, 73, 195, 0.18);
+}
+
+.note-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.note-card {
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: var(--small-raised);
+}
+
+.note-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.note-detail {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.note-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.note-empty {
+  grid-column: 1;
+}
+
 @media (max-width: 880px) {
   body {
     background-size: 28px 28px;
@@ -861,10 +933,6 @@ menu {
 
   .section-header h2 {
     font-size: 20px;
-  }
-
-  .see-all {
-    display: inline-flex;
   }
 
   .task-list,

@@ -103,14 +103,14 @@ const defaultTasks = [
   },
   {
     id: createId(),
-    title: "Capture Inbox Ideas",
-    details: "Sort uncategorized notes and turn promising ideas into actionable tasks.",
+    title: "Pick up dry cleaning on the way home",
+    details: "Corner of 5th and Main, closes at 7pm.",
     date: localDateString(),
-    time: "16:00",
+    time: "",
     endTime: "",
     startReminderMinutes: null,
     endReminderMinutes: null,
-    priority: "Medium",
+    priority: "Low",
     category: "inbox",
     files: 0,
     team: "",
@@ -145,6 +145,7 @@ const icons = {
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>',
   "add-task": '<svg viewBox="0 0 24 24"><path d="M12 5v8M8 9h8"></path><path d="M17 19h4"></path><path d="m19 17 2 2-2 2"></path><rect x="3" y="4" width="14" height="16" rx="4"></rect></svg>',
+  note: '<svg viewBox="0 0 24 24"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"></path><path d="M15 3v4a1 1 0 0 0 1 1h4"></path></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8"></path></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"></path><path d="M14 2v5h5"></path></svg>',
   group: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
@@ -152,11 +153,15 @@ const icons = {
   trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>',
 };
 
+const SORT_MODES = ["auto", "priority", "time", "newest"];
+const SORT_LABELS = { auto: "Sort: Auto", priority: "Sort: Priority", time: "Sort: Time", newest: "Sort: Newest" };
+
 const state = {
   tasks: loadTasks(),
   hasStoredTasks: Boolean(localStorage.getItem(STORAGE_KEY)),
   filter: "today",
   view: "list",
+  sortBy: "auto",
   sync: loadSyncMeta(),
   syncTimer: null,
   syncSaveTimer: null,
@@ -169,6 +174,8 @@ const state = {
 const elements = {
   taskList: document.querySelector("#taskList"),
   sectionTitle: document.querySelector("#sectionTitle"),
+  viewSwitch: document.querySelector(".view-switch"),
+  sortButton: document.querySelector("#sortButton"),
   pendingCount: document.querySelector("#pendingCount"),
   priorityCount: document.querySelector("#priorityCount"),
   progressLabel: document.querySelector("#progressLabel"),
@@ -201,7 +208,12 @@ document.querySelectorAll("#taskDialog [data-dialog-close]").forEach((button) =>
 document.querySelector("#scheduleButton").addEventListener("click", () => {
   document.querySelector("#tasksSection").scrollIntoView({ behavior: "smooth", block: "start" });
 });
-document.querySelector("#seeAllButton").addEventListener("click", () => setFilter("today"));
+elements.sortButton.addEventListener("click", () => {
+  const idx = SORT_MODES.indexOf(state.sortBy);
+  state.sortBy = SORT_MODES[(idx + 1) % SORT_MODES.length];
+  elements.sortButton.textContent = SORT_LABELS[state.sortBy];
+  render();
+});
 document.querySelector("#searchButton").addEventListener("click", openSearch);
 
 document.querySelectorAll("[data-filter]").forEach((button) => {
@@ -380,7 +392,7 @@ function openTaskDialog(task = null) {
     document.querySelector("#taskCategory").value = normalizedTask.category || "today";
     document.querySelector("#taskPriority").value = normalizedTask.priority || "Medium";
   } else {
-    const category = state.filter === "completed" ? "today" : state.filter;
+    const category = state.filter === "completed" || state.filter === "inbox" ? "today" : state.filter;
     document.querySelector("#taskDate").value = category === "upcoming" ? addDays(localDateString(), 1) : localDateString();
     document.querySelector("#taskTime").value = "10:00";
     document.querySelector("#taskCategory").value = category;
@@ -415,6 +427,12 @@ function render() {
   renderStats();
   scheduleTaskReminders();
   elements.sectionTitle.textContent = getSectionTitle();
+  elements.viewSwitch.style.display = state.filter === "inbox" ? "none" : "";
+  elements.sortButton.style.display = state.filter === "completed" || state.filter === "inbox" ? "none" : "";
+  if (state.filter === "inbox") {
+    renderNotes();
+    return;
+  }
   elements.taskList.className = `task-list ${state.view}`;
   if (state.view === "board") {
     renderBoard();
@@ -553,9 +571,98 @@ function renderBoard() {
   bindTaskButtons();
 }
 
+function renderNotes() {
+  const notes = state.tasks.filter((t) => t.category === "inbox").sort((a, b) => b.createdAt - a.createdAt);
+  const listHtml = notes.length
+    ? notes
+        .map(
+          (note) => `
+            <article class="note-card" data-id="${note.id}">
+              <p class="note-title">${escapeHtml(note.title)}</p>
+              ${note.details && note.details !== "No extra details yet." ? `<p class="note-detail">${escapeHtml(note.details)}</p>` : ""}
+              <div class="note-meta">
+                <span>${formatTimeAgo(note.createdAt)}</span>
+                <button class="text-action" data-note-action="delete" data-id="${note.id}" type="button">Delete</button>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : '<div class="empty-state note-empty">No notes yet. Jot something down below.</div>';
+
+  elements.taskList.className = "note-list";
+  elements.taskList.innerHTML = `
+    <div class="note-composer inset">
+      <textarea id="noteInput" placeholder="Write a quick note..." rows="3" maxlength="300"></textarea>
+      <div class="note-composer-footer">
+        <span class="field-hint" id="noteCharCount">0 / 300</span>
+        <button class="primary-button" id="saveNoteButton" type="button">Save Note</button>
+      </div>
+    </div>
+    ${listHtml}
+  `;
+
+  const noteInput = document.querySelector("#noteInput");
+  const saveBtn = document.querySelector("#saveNoteButton");
+  const charCount = document.querySelector("#noteCharCount");
+
+  noteInput.addEventListener("input", () => {
+    charCount.textContent = `${noteInput.value.length} / 300`;
+  });
+
+  saveBtn.addEventListener("click", () => {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    state.tasks.unshift({
+      id: createId(),
+      title: text.slice(0, 80),
+      details: text.length > 80 ? text : "",
+      date: localDateString(),
+      time: "",
+      endTime: "",
+      startReminderMinutes: null,
+      endReminderMinutes: null,
+      priority: "Low",
+      category: "inbox",
+      files: 0,
+      team: "",
+      completed: false,
+      createdAt: Date.now(),
+    });
+    saveTasks();
+    render();
+  });
+
+  noteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      saveBtn.click();
+    }
+  });
+
+  document.querySelectorAll("[data-note-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.tasks = state.tasks.filter((t) => t.id !== btn.dataset.id);
+      saveTasks();
+      render();
+    });
+  });
+}
+
+function formatTimeAgo(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function renderStats() {
   const today = state.tasks.filter((task) => task.category === "today");
-  const pending = state.tasks.filter((task) => !task.completed).length;
+  const pending = state.tasks.filter((task) => !task.completed && task.category !== "inbox").length;
   const completed = state.tasks.filter((task) => task.completed).length;
   const openToday = today.filter((task) => !task.completed).length;
   const highToday = today.filter((task) => !task.completed && task.priority === "High").length;
@@ -601,6 +708,16 @@ function getVisibleTasks() {
 }
 
 function compareTasks(a, b) {
+  if (state.sortBy === "priority") {
+    return (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99) || b.createdAt - a.createdAt;
+  }
+  if (state.sortBy === "time") {
+    return minutesFromTime(a.time) - minutesFromTime(b.time) || b.createdAt - a.createdAt;
+  }
+  if (state.sortBy === "newest") {
+    return b.createdAt - a.createdAt;
+  }
+  // auto: completed last → date → priority → time → created
   return (
     Number(a.completed) - Number(b.completed) ||
     dateRank(a.date) - dateRank(b.date) ||
@@ -613,7 +730,7 @@ function compareTasks(a, b) {
 function getSectionTitle() {
   const titles = {
     today: window.matchMedia("(max-width: 880px)").matches ? "Today" : "Today's Focus",
-    inbox: "Inbox",
+    inbox: "Notes",
     upcoming: "Upcoming",
     completed: "Completed",
   };

@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <div class="app-shell">
@@ -28,8 +28,8 @@
             <span>Today</span>
           </button>
           <button class="nav-item" data-filter="inbox" type="button">
-            <span class="icon" data-icon="inbox"></span>
-            <span>Inbox</span>
+            <span class="icon" data-icon="note"></span>
+            <span>Notes</span>
           </button>
           <button class="nav-item" data-filter="upcoming" type="button">
             <span class="icon" data-icon="clock"></span>
@@ -130,7 +130,7 @@
                 <button class="active" data-view="list" type="button">List</button>
                 <button data-view="board" type="button">Board</button>
               </div>
-              <button class="see-all" id="seeAllButton" type="button">See All</button>
+              <button class="sort-toggle" id="sortButton" type="button">Sort: Auto</button>
             </div>
             <div class="task-list" id="taskList"></div>
           </section>
@@ -143,8 +143,8 @@
 
       <nav class="bottom-nav" aria-label="Mobile task navigation">
         <button class="mobile-nav-item" data-filter="inbox" type="button">
-          <span class="icon" data-icon="inbox"></span>
-          <span>Inbox</span>
+          <span class="icon" data-icon="note"></span>
+          <span>Notes</span>
         </button>
         <button class="mobile-nav-item active" data-filter="today" type="button">
           <span class="icon" data-icon="calendar"></span>
@@ -246,6 +246,6 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=19" type="module"></script>
+    <script src="app.js?v=20" type="module"></script>
   </body>
 </html>
