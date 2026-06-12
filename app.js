@@ -36,9 +36,8 @@ async function storeFile(file) {
   const db = await openFileDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(FILE_STORE_NAME, "readwrite");
-    const store = tx.objectStore(FILE_STORE_NAME);
     const meta = { id, name: file.name, type: file.type, size: buffer.byteLength };
-    store.put({ id, data: buffer, name: file.name, type: file.type });
+    tx.objectStore(FILE_STORE_NAME).put({ id, data: buffer, name: file.name, type: file.type });
     tx.oncomplete = () => { db.close(); resolve(meta); };
     tx.onerror = () => { db.close(); reject(tx.error); };
   });
@@ -46,28 +45,15 @@ async function storeFile(file) {
 
 async function storeFiles(fileList) {
   if (!fileList.length) return [];
-  const db = await openFileDB();
-  // Read all files into memory first
-  const items = [];
+  // Process each file in its own transaction to avoid size limits
+  const results = [];
   for (const file of fileList) {
     try {
-      const id = createId();
-      const buffer = await file.arrayBuffer();
-      items.push({ id, data: buffer, name: file.name, type: file.type, size: buffer.byteLength });
-    } catch { /* skip unreadable file */ }
+      const meta = await storeFile(file);
+      results.push(meta);
+    } catch { /* skip failures — files too large may hit browser limits */ }
   }
-  if (!items.length) { db.close(); return []; }
-  // Write all items in a single transaction
-  return new Promise((resolve) => {
-    const tx = db.transaction(FILE_STORE_NAME, "readwrite");
-    const store = tx.objectStore(FILE_STORE_NAME);
-    items.forEach((item) => store.put(item));
-    tx.oncomplete = () => {
-      db.close();
-      resolve(items.map(({ data, ...meta }) => meta));
-    };
-    tx.onerror = () => { db.close(); resolve([]); };
-  });
+  return results;
 }
 
 async function loadFile(id) {
