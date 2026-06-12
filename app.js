@@ -199,11 +199,26 @@ elements.searchInput.addEventListener("input", () => renderSearch(elements.searc
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    registerServiceWorker();
   });
 }
 
 render();
+
+async function registerServiceWorker() {
+  try {
+    const registration = await navigator.serviceWorker.register("./sw.js");
+    await registration.update();
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (sessionStorage.getItem("taskflow.reloaded-for-update") === "1") return;
+      sessionStorage.setItem("taskflow.reloaded-for-update", "1");
+      window.location.reload();
+    });
+  } catch {
+    // The app still works without offline support.
+  }
+}
 
 function loadTasks() {
   const stored = localStorage.getItem(STORAGE_KEY);
