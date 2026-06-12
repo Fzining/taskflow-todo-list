@@ -536,11 +536,20 @@ async function initAuth() {
   }
 }
 
+function friendlyAuthError(error) {
+  const msg = error.message || "";
+  if (msg.includes("rate limit")) return "Too many attempts. Please wait a moment and try again.";
+  if (msg.includes("Database error")) return "Server error. Please make sure the Supabase RLS SQL has been executed.";
+  if (msg.includes("Invalid login")) return "Incorrect email or password.";
+  if (msg.includes("already")) return "An account with this email already exists.";
+  return msg;
+}
+
 async function handleSignIn(email, password) {
   if (!email || !password) { elements.authError.textContent = "Please enter both email and password."; return; }
   elements.authError.textContent = "";
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) { elements.authError.textContent = error.message; }
+  if (error) { elements.authError.textContent = friendlyAuthError(error); }
 }
 
 async function handleSignUp(email, password) {
@@ -548,7 +557,7 @@ async function handleSignUp(email, password) {
   if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
   elements.regError.textContent = "";
   const { error } = await supabase.auth.signUp({ email, password });
-  if (error) { elements.regError.textContent = error.message; }
+  if (error) { elements.regError.textContent = friendlyAuthError(error); }
 }
 
 async function onUserLoggedIn(user) {

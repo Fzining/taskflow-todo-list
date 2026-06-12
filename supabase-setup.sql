@@ -1,4 +1,6 @@
-create table if not exists public.taskflow_state (
+-- Fix: drop the default trigger that writes new auth users into public.users
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user() cascade;
   id text primary key,
   payload jsonb not null default '{"tasks":[],"updatedAt":0}'::jsonb,
   updated_at timestamptz not null default now()
