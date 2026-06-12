@@ -22,5 +22,5 @@ On Chrome, Edge, or Safari-compatible mobile browsers, open the app over `localh
 - Complete, duplicate, and delete tasks
 - Search dialog
 - List and board views
-- Cross-device cloud sync through Vercel Blob, with local offline fallback
+- Cross-device cloud sync through Supabase, with local offline fallback
 - Offline app shell through a service worker

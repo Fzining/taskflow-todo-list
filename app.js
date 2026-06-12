@@ -1,8 +1,11 @@
 const STORAGE_KEY = "taskflow.tasks.v1";
 const SYNC_META_KEY = "taskflow.sync-meta.v1";
 const SYNC_INTERVAL_MS = 5000;
-const API_ORIGIN = window.location.hostname.endsWith("github.io") ? "https://taskflow-todo-list-omega.vercel.app" : "";
-const TASKS_API_URL = `${API_ORIGIN}/api/tasks`;
+const SUPABASE_REST_URL = "https://vzllsenewstwjbnplysm.supabase.co/rest/v1";
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_9y_vYoh3zmM_zph31oVj3g_3uw79IsX";
+const TASKS_TABLE = "taskflow_state";
+const TASKS_RECORD_ID = "default";
 const createId = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const priorityRank = {
@@ -308,10 +311,17 @@ function startCloudSync() {
 
 async function syncFromCloud(options = {}) {
   try {
-    const response = await fetch(TASKS_API_URL, { cache: "no-store" });
+    const response = await fetch(
+      `${SUPABASE_REST_URL}/${TASKS_TABLE}?id=eq.${TASKS_RECORD_ID}&select=payload,updated_at&limit=1`,
+      {
+        cache: "no-store",
+        headers: supabaseHeaders(),
+      },
+    );
     if (!response.ok) throw new Error("Sync load failed");
 
-    const remote = await response.json();
+    const rows = await response.json();
+    const remote = normalizeRemotePayload(rows[0]?.payload);
     const remoteUpdatedAt = Number(remote.updatedAt || 0);
     const remoteTasks = Array.isArray(remote.tasks) ? remote.tasks : [];
 
@@ -353,19 +363,45 @@ function scheduleCloudSave(delay = 350) {
 
 async function pushTasksToCloud() {
   try {
-    const response = await fetch(TASKS_API_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tasks: state.tasks, updatedAt: state.sync.updatedAt }),
+    const payload = {
+      tasks: state.tasks,
+      updatedAt: state.sync.updatedAt || Date.now(),
+    };
+    const response = await fetch(`${SUPABASE_REST_URL}/${TASKS_TABLE}?on_conflict=id`, {
+      method: "POST",
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation",
+      }),
+      body: JSON.stringify({
+        id: TASKS_RECORD_ID,
+        payload,
+        updated_at: new Date(payload.updatedAt).toISOString(),
+      }),
     });
     if (!response.ok) throw new Error("Sync save failed");
 
     const saved = await response.json();
-    state.sync.updatedAt = Number(saved.updatedAt || state.sync.updatedAt);
+    state.sync.updatedAt = Number(saved[0]?.payload?.updatedAt || state.sync.updatedAt);
     saveSyncMeta();
   } catch {
     // Local changes remain saved and will retry on the next user change/online event.
   }
+}
+
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    ...extra,
+  };
+}
+
+function normalizeRemotePayload(payload) {
+  return {
+    tasks: Array.isArray(payload?.tasks) ? payload.tasks : [],
+    updatedAt: Number(payload?.updatedAt || 0),
+  };
 }
 
 function mergeTasks(remoteTasks, localTasks) {
