@@ -1,9 +1,9 @@
-const CACHE_NAME = "taskflow-pwa-v16";
+const CACHE_NAME = "taskflow-pwa-v17";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=16",
-  "./app.js?v=16",
+  "./styles.css?v=17",
+  "./app.js?v=17",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",
@@ -40,5 +40,19 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html"))),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        const openClient = clientList.find((client) => "focus" in client);
+        if (openClient) return openClient.focus();
+        if (clients.openWindow) return clients.openWindow("./");
+        return undefined;
+      }),
   );
 });

@@ -1,6 +1,8 @@
 const STORAGE_KEY = "taskflow.tasks.v1";
 const SYNC_META_KEY = "taskflow.sync-meta.v1";
+const REMINDER_META_KEY = "taskflow.reminder-meta.v1";
 const SYNC_INTERVAL_MS = 5000;
+const MAX_TIMEOUT_MS = 2147483647;
 const SUPABASE_REST_URL = "https://vzllsenewstwjbnplysm.supabase.co/rest/v1";
 const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_9y_vYoh3zmM_zph31oVj3g_3uw79IsX";
@@ -19,8 +21,10 @@ const defaultTasks = [
     id: createId(),
     title: "Review Q3 Marketing Strategy",
     details: "Analyze the latest metrics from the Q2 campaign and prepare the slide deck for the executive meeting.",
+    date: localDateString(),
     time: "10:00",
     endTime: "",
+    reminderMinutes: null,
     priority: "High",
     category: "today",
     files: 2,
@@ -32,8 +36,10 @@ const defaultTasks = [
     id: createId(),
     title: "Design System Update",
     details: "Incorporate the new neumorphic shadow tokens into the global CSS variables and update the documentation.",
+    date: localDateString(),
     time: "13:30",
     endTime: "",
+    reminderMinutes: null,
     priority: "Medium",
     category: "today",
     files: 0,
@@ -45,8 +51,10 @@ const defaultTasks = [
     id: createId(),
     title: "Approve Weekly Timesheets",
     details: "Review and approve pending hours for the design team.",
+    date: localDateString(),
     time: "09:15",
     endTime: "",
+    reminderMinutes: null,
     priority: "Low",
     category: "today",
     files: 0,
@@ -59,8 +67,10 @@ const defaultTasks = [
     id: createId(),
     title: "Client Presentation",
     details: "Walk the client through final product flows and collect launch feedback.",
+    date: localDateString(),
     time: "14:00",
     endTime: "15:00",
+    reminderMinutes: null,
     priority: "Medium",
     category: "today",
     files: 0,
@@ -72,8 +82,10 @@ const defaultTasks = [
     id: createId(),
     title: "Morning Standup",
     details: "Quick update with the product team.",
+    date: localDateString(),
     time: "09:00",
     endTime: "09:30",
+    reminderMinutes: null,
     priority: "Low",
     category: "today",
     files: 0,
@@ -86,8 +98,10 @@ const defaultTasks = [
     id: createId(),
     title: "Capture Inbox Ideas",
     details: "Sort uncategorized notes and turn promising ideas into actionable tasks.",
+    date: localDateString(),
     time: "16:00",
     endTime: "",
+    reminderMinutes: null,
     priority: "Medium",
     category: "inbox",
     files: 0,
@@ -99,8 +113,10 @@ const defaultTasks = [
     id: createId(),
     title: "Plan Friday Roadmap Review",
     details: "Prepare agenda and collect open questions before the roadmap review.",
+    date: addDays(localDateString(), 1),
     time: "11:00",
     endTime: "",
+    reminderMinutes: null,
     priority: "High",
     category: "upcoming",
     files: 1,
@@ -114,6 +130,7 @@ const icons = {
   calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path><path d="M8 14h3v3H8z"></path></svg>',
   inbox: '<svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>',
   clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>',
+  bell: '<svg viewBox="0 0 24 24"><path d="M10 21h4"></path><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path></svg>',
   "check-circle": '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m9 12 2 2 4-5"></path></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>',
@@ -134,6 +151,8 @@ const state = {
   sync: loadSyncMeta(),
   syncTimer: null,
   syncSaveTimer: null,
+  reminderTimers: new Map(),
+  reminders: loadReminderMeta(),
   isApplyingRemote: false,
 };
 
@@ -193,12 +212,19 @@ elements.taskForm.addEventListener("submit", (event) => {
   const taskData = {
     title: formData.get("title").toString().trim(),
     details: formData.get("details").toString().trim() || "No extra details yet.",
+    date: formData.get("date").toString(),
     time: formData.get("time").toString(),
     endTime: formData.get("endTime").toString(),
+    reminderMinutes: parseReminderMinutes(formData.get("reminderMinutes").toString()),
     priority: formData.get("priority").toString(),
     category: formData.get("category").toString(),
   };
   const editingId = elements.taskForm.dataset.editingId;
+
+  if (taskData.reminderMinutes !== null && !taskData.endTime) {
+    window.alert("Please add an end time before setting a reminder.");
+    return;
+  }
 
   if (editingId) {
     state.tasks = state.tasks.map((task) => (task.id === editingId ? { ...task, ...taskData, updatedAt: Date.now() } : task));
@@ -213,6 +239,10 @@ elements.taskForm.addEventListener("submit", (event) => {
     });
   }
 
+  if (taskData.reminderMinutes !== null) {
+    void requestNotificationAccess();
+  }
+
   saveTasks();
   const nextFilter = taskData.category;
   resetTaskDialog();
@@ -225,6 +255,11 @@ elements.taskForm.addEventListener("submit", (event) => {
 });
 
 elements.searchInput.addEventListener("input", () => renderSearch(elements.searchInput.value));
+document.querySelector("#taskCategory").addEventListener("change", (event) => {
+  if (elements.taskForm.dataset.editingId) return;
+  document.querySelector("#taskDate").value =
+    event.target.value === "upcoming" ? addDays(localDateString(), 1) : localDateString();
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -269,6 +304,14 @@ function loadSyncMeta() {
   }
 }
 
+function loadReminderMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(REMINDER_META_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
 function saveTasks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
   state.hasStoredTasks = true;
@@ -283,6 +326,10 @@ function saveSyncMeta() {
   localStorage.setItem(SYNC_META_KEY, JSON.stringify(state.sync));
 }
 
+function saveReminderMeta() {
+  localStorage.setItem(REMINDER_META_KEY, JSON.stringify(state.reminders));
+}
+
 function openTaskDialog(task = null) {
   resetTaskDialog();
   if (task) {
@@ -291,13 +338,17 @@ function openTaskDialog(task = null) {
     elements.taskSubmitButton.textContent = "Save Changes";
     document.querySelector("#taskTitle").value = task.title;
     document.querySelector("#taskDetails").value = task.details === "No extra details yet." ? "" : task.details;
+    document.querySelector("#taskDate").value = task.date || localDateString();
     document.querySelector("#taskTime").value = task.time || "10:00";
     document.querySelector("#taskEndTime").value = task.endTime || "";
+    document.querySelector("#taskReminderMinutes").value = task.reminderMinutes ?? "";
     document.querySelector("#taskCategory").value = task.category || "today";
     document.querySelector("#taskPriority").value = task.priority || "Medium";
   } else {
+    const category = state.filter === "completed" ? "today" : state.filter;
+    document.querySelector("#taskDate").value = category === "upcoming" ? addDays(localDateString(), 1) : localDateString();
     document.querySelector("#taskTime").value = "10:00";
-    document.querySelector("#taskCategory").value = state.filter === "completed" ? "today" : state.filter;
+    document.querySelector("#taskCategory").value = category;
   }
   elements.taskDialog.showModal();
   document.querySelector("#taskTitle").focus();
@@ -327,6 +378,7 @@ function setFilter(filter) {
 
 function render() {
   renderStats();
+  scheduleTaskReminders();
   elements.sectionTitle.textContent = getSectionTitle();
   elements.taskList.className = `task-list ${state.view}`;
   if (state.view === "board") {
@@ -516,6 +568,7 @@ function getVisibleTasks() {
 function compareTasks(a, b) {
   return (
     Number(a.completed) - Number(b.completed) ||
+    dateRank(a.date) - dateRank(b.date) ||
     (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99) ||
     minutesFromTime(a.time) - minutesFromTime(b.time) ||
     b.createdAt - a.createdAt
@@ -539,6 +592,7 @@ function taskTemplate(task) {
     ? `<span>${iconInline("check-circle")} Completed${task.completedAt ? ` at ${task.completedAt}` : ""}</span>`
     : `
       <span>${iconInline("clock")} ${formatTimeRange(task)}</span>
+      ${task.reminderMinutes !== null && task.reminderMinutes !== undefined ? `<span>${iconInline("bell")} ${formatReminderLabel(task.reminderMinutes)}</span>` : ""}
       ${task.files ? `<span>${iconInline("file")} ${task.files} Files</span>` : ""}
       ${task.team ? `<span class="team-meta">${iconInline("group")} ${escapeHtml(task.team)}</span>` : ""}
     `;
@@ -603,7 +657,8 @@ function bindTaskButtons() {
 
 function formatTimeRange(task) {
   const start = formatTime(task.time);
-  return task.endTime ? `${start} - ${formatTime(task.endTime)}` : start;
+  const range = task.endTime ? `${start} - ${formatTime(task.endTime)}` : start;
+  return task.date && task.date !== localDateString() ? `${formatDate(task.date)} · ${range}` : range;
 }
 
 function formatTime(value) {
@@ -621,11 +676,140 @@ function minutesFromTime(value) {
 }
 
 function isOverdue(task) {
-  if (task.category !== "today" || !task.time) return false;
-  const [hour, minute] = task.time.split(":").map(Number);
-  const due = new Date();
-  due.setHours(hour, minute, 0, 0);
-  return due.getTime() < Date.now();
+  const dueAt = getTaskDueAt(task) || getTaskStartAt(task);
+  return Boolean(dueAt && dueAt.getTime() < Date.now());
+}
+
+function scheduleTaskReminders() {
+  state.reminderTimers.forEach((timer) => window.clearTimeout(timer));
+  state.reminderTimers.clear();
+
+  state.tasks.forEach((task) => {
+    if (task.completed || task.reminderMinutes === null || task.reminderMinutes === undefined || !task.endTime) return;
+    const reminderKey = getReminderKey(task);
+    if (state.reminders[task.id] === reminderKey) return;
+
+    const dueAt = getTaskDueAt(task);
+    if (!dueAt) return;
+    const reminderAt = dueAt.getTime() - Number(task.reminderMinutes) * 60000;
+    const delay = reminderAt - Date.now();
+    if (delay <= 0 || delay > MAX_TIMEOUT_MS) return;
+
+    const timer = window.setTimeout(() => {
+      notifyTaskReminder(task.id, reminderKey);
+    }, delay);
+    state.reminderTimers.set(task.id, timer);
+  });
+}
+
+async function notifyTaskReminder(taskId, reminderKey) {
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task || task.completed || getReminderKey(task) !== reminderKey) return;
+
+  state.reminders[taskId] = reminderKey;
+  saveReminderMeta();
+  await showTaskNotification(task);
+}
+
+async function showTaskNotification(task) {
+  const title = "TaskFlow reminder";
+  const body = `${task.title} is due at ${formatTime(task.endTime)}.`;
+
+  if (!("Notification" in window)) {
+    window.alert(`${title}\n${body}`);
+    return;
+  }
+
+  if (Notification.permission === "default") {
+    await requestNotificationAccess();
+  }
+
+  if (Notification.permission !== "granted") {
+    window.alert(`${title}\n${body}`);
+    return;
+  }
+
+  const options = {
+    body,
+    icon: "assets/icon-192.png",
+    badge: "assets/icon-192.png",
+    tag: `taskflow-${task.id}`,
+  };
+
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification(title, options);
+    return;
+  }
+
+  new Notification(title, options);
+}
+
+async function requestNotificationAccess() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  try {
+    await Notification.requestPermission();
+  } catch {
+    // Permission can still be granted later from browser settings.
+  }
+}
+
+function getReminderKey(task) {
+  return [task.date || localDateString(), task.endTime || "", task.reminderMinutes ?? "", task.title || ""].join("|");
+}
+
+function getTaskDueAt(task) {
+  if (!task.endTime) return null;
+  return dateTimeFromParts(task.date || localDateString(), task.endTime);
+}
+
+function getTaskStartAt(task) {
+  if (!task.time) return null;
+  return dateTimeFromParts(task.date || localDateString(), task.time);
+}
+
+function dateTimeFromParts(date, time) {
+  if (!date || !time) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
+}
+
+function parseReminderMinutes(value) {
+  if (value === "") return null;
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes)) return null;
+  return Math.max(0, Math.min(1440, Math.round(minutes)));
+}
+
+function formatReminderLabel(minutes) {
+  const value = Number(minutes);
+  return value === 0 ? "At deadline" : `${value} min before end`;
+}
+
+function formatDate(value) {
+  const date = dateTimeFromParts(value, "00:00");
+  if (!date) return value;
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function dateRank(value) {
+  const date = dateTimeFromParts(value || localDateString(), "00:00");
+  return date ? date.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(value, days) {
+  const date = dateTimeFromParts(value, "00:00") || new Date();
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
 }
 
 function iconInline(name) {
