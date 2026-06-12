@@ -2,8 +2,8 @@ const CACHE_NAME = "taskflow-pwa-v30";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=30",
-  "./app.js?v=30",
+  "./styles.css?v=31",
+  "./app.js?v=31",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",

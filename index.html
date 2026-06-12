@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles.css?v=30" />
+    <link rel="stylesheet" href="styles.css?v=31" />
   </head>
   <body>
     <div id="authPage">
@@ -32,6 +32,10 @@
         <div class="auth-step" id="authRegister" style="display:none">
           <h1>Create your account</h1>
           <p class="auth-subtitle">A free account to keep your tasks in sync</p>
+          <label>
+            <span>Name</span>
+            <input id="regNameInput" type="text" placeholder="Your name" maxlength="30" autocomplete="name" />
+          </label>
           <label>
             <span>Email</span>
             <input id="regEmailInput" type="email" placeholder="your@email.com" autocomplete="email" />
@@ -93,7 +97,7 @@
 
       <main class="main-panel">
         <header class="topbar">
-          <div class="mobile-brand">
+          <div class="mobile-brand" id="profileTriggerMobile" role="button" tabindex="0" title="Open profile">
             <div class="avatar" aria-hidden="true">AR</div>
             <h1>TaskFlow</h1>
           </div>
@@ -333,6 +337,6 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=30" type="module"></script>
+    <script src="app.js?v=31" type="module"></script>
   </body>
 </html>

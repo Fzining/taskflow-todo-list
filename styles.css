@@ -1424,11 +1424,13 @@ menu {
 }
 
 /* Sidebar brand clickable */
-#profileTrigger {
+#profileTrigger,
+#profileTriggerMobile {
   cursor: pointer;
   transition: transform 140ms ease;
 }
 
-#profileTrigger:hover {
+#profileTrigger:hover,
+#profileTriggerMobile:hover {
   transform: translateY(-1px);
 }

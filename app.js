@@ -18,6 +18,7 @@ const supabase = window.supabase.createClient(
 );
 
 let currentUserId = null;
+let currentUserEmail = "";
 
 const priorityRank = {
   High: 0,
@@ -474,11 +475,14 @@ async function initAuth() {
   });
 
   document.querySelector("#createAccountButton").addEventListener("click", () => {
+    const name = document.querySelector("#regNameInput").value.trim();
     const email = document.querySelector("#regEmailInput").value.trim();
     const password = document.querySelector("#regPasswordInput").value;
     const confirm = document.querySelector("#regConfirmInput").value;
+    if (!name) { elements.regError.textContent = "Please enter your name."; return; }
     if (password.length < 6) { elements.regError.textContent = "Password must be at least 6 characters."; return; }
     if (password !== confirm) { elements.regError.textContent = "Passwords do not match."; return; }
+    localStorage.setItem("taskflow.displayName", name);
     handleSignUp(email, password);
   });
 
@@ -506,6 +510,7 @@ async function initAuth() {
 
   // Profile dialog
   document.querySelector("#profileTrigger").addEventListener("click", openProfileDialog);
+  document.querySelector("#profileTriggerMobile").addEventListener("click", openProfileDialog);
   document.querySelector("#profileCloseButton").addEventListener("click", () => elements.profileDialog.close());
   document.querySelector("#profileDoneButton").addEventListener("click", () => {
     const name = elements.displayNameInput.value.trim();
@@ -523,15 +528,18 @@ async function initAuth() {
   supabase.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
       currentUserId = session.user.id;
+      currentUserEmail = session.user.email || "";
       await onUserLoggedIn(session.user);
     } else if (event === "SIGNED_OUT") {
       currentUserId = null;
+      currentUserEmail = "";
     }
   });
 
   const { data } = await supabase.auth.getSession();
   if (data.session?.user) {
     currentUserId = data.session.user.id;
+    currentUserEmail = data.session.user.email || "";
     await onUserLoggedIn(data.session.user);
   }
 }
@@ -562,6 +570,7 @@ async function handleSignUp(email, password) {
 
 async function onUserLoggedIn(user) {
   currentUserId = user.id;
+  currentUserEmail = user.email || "";
   // Pull remote tasks for this user
   let synced = false;
   try {
@@ -606,13 +615,12 @@ async function handleSignOut() {
 }
 
 function updateUserDisplay() {
-  const displayName = localStorage.getItem("taskflow.displayName") || (currentUserId || "");
-  const shortName = displayName.includes("@") ? displayName.split("@")[0] : displayName;
-  elements.userDisplayName.textContent = shortName || "User";
-  elements.welcomeGreeting.textContent = "Good morning, " + (shortName || "there");
-  elements.mobileGreeting.textContent = "Good Morning, " + (shortName || "there");
-  elements.profileEmail.textContent = currentUserId || "";
-  elements.profileName.textContent = shortName || "User";
+  const displayName = localStorage.getItem("taskflow.displayName") || currentUserEmail.split("@")[0] || "User";
+  elements.userDisplayName.textContent = displayName;
+  elements.welcomeGreeting.textContent = "Good morning, " + displayName;
+  elements.mobileGreeting.textContent = "Good Morning, " + displayName;
+  elements.profileEmail.textContent = currentUserEmail || "";
+  elements.profileName.textContent = displayName;
   elements.displayNameInput.value = localStorage.getItem("taskflow.displayName") || "";
 }
 
